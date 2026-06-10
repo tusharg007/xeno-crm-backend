@@ -63,6 +63,25 @@ def _post_json(path: str, payload: dict | list | None = None, timeout: int = 90)
     return _request_backend("POST", path, json=payload, timeout=timeout)
 
 
+def _resolve_segment_id(campaign_draft: dict | None) -> str | None:
+    if campaign_draft and campaign_draft.get("segment_id"):
+        return campaign_draft["segment_id"]
+    if st.session_state.get("pending_segment_id"):
+        return st.session_state.pending_segment_id
+
+    segments = _get_json("/segments", [])
+    if not isinstance(segments, list) or not segments:
+        return None
+
+    segment_name = (campaign_draft or {}).get("segment_name")
+    if segment_name:
+        for segment in segments:
+            if segment.get("name") == segment_name:
+                return segment.get("id")
+
+    return segments[0].get("id")
+
+
 def _render_suggestions() -> None:
     prompts = [
         "Find women who bought ethnic wear but haven't ordered in 45 days",
@@ -82,9 +101,14 @@ def _sync_agent_state(data: dict) -> None:
     st.session_state.segment_preview = data.get("segment_preview")
     st.session_state.campaign_draft = data.get("campaign_draft")
     st.session_state.awaiting_approval = data.get("awaiting_approval", False)
-    st.session_state.pending_segment_id = data.get("pending_segment_id") or st.session_state.get(
-        "pending_segment_id"
+    segment_id = (
+        data.get("pending_segment_id")
+        or (data.get("campaign_draft") or {}).get("segment_id")
+        or st.session_state.get("pending_segment_id")
     )
+    if segment_id and st.session_state.campaign_draft is not None:
+        st.session_state.campaign_draft["segment_id"] = segment_id
+    st.session_state.pending_segment_id = segment_id
     st.session_state.session_id = data.get("session_id") or st.session_state.session_id
 
 
@@ -216,9 +240,7 @@ def _agent_tab() -> None:
                             type="primary",
                             use_container_width=True,
                         ):
-                            segment_id = campaign_draft.get(
-                                "segment_id"
-                            ) or st.session_state.get("pending_segment_id")
+                            segment_id = _resolve_segment_id(campaign_draft)
                             if segment_id:
                                 create_response = _post_json(
                                     "/campaigns/",

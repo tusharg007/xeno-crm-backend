@@ -214,5 +214,6 @@ async def run_agent(
         "segment_preview": result.get("segment_preview"),
         "campaign_draft": result.get("campaign_draft"),
         "awaiting_approval": result.get("awaiting_approval", False),
+        "pending_segment_id": result.get("pending_segment_id"),
         "session_id": session_id,
     }

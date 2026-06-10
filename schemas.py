@@ -160,4 +160,5 @@ class ChatResponse(BaseModel):
     segment_preview: dict[str, Any] | None = None
     campaign_draft: dict[str, Any] | None = None
     awaiting_approval: bool = False
+    pending_segment_id: str | None = None
     session_id: str = ""
