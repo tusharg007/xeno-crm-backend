@@ -11,7 +11,11 @@ import streamlit as st
 
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL", "http://localhost:8000")
 
-st.set_page_config(title="Xeno - StyleHub", layout="wide", page_icon="💙")
+st.set_page_config(
+    page_title="Xeno - StyleHub",
+    layout="wide",
+    page_icon=":blue_heart:",
+)
 
 
 def _init_session_state() -> None:
