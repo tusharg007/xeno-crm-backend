@@ -4,9 +4,9 @@ Xeno Mini CRM is an AI-native campaign management system for StyleHub, an Indian
 
 ## Live Demo
 
-- Frontend: [STREAMLIT_URL]
-- API Docs: [RENDER_BACKEND_URL]/docs
-- Walkthrough video: [LOOM_URL]
+- Frontend: https://xeno-crm-backend-5eeqqhufg62kjv6zlsuhvz.streamlit.app
+- API Docs: https://xeno-crm-backend-uelp.onrender.com/docs
+- Channel Service: https://xeno-channel-service-c1yr.onrender.com/health
 
 ## Architecture
 
