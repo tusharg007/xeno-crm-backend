@@ -10,6 +10,7 @@ import streamlit as st
 
 
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL", "http://localhost:8000")
+BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "65"))
 
 st.set_page_config(
     page_title="Xeno - StyleHub",
@@ -32,17 +33,34 @@ def _init_session_state() -> None:
             st.session_state[key] = value
 
 
+def _request_backend(method: str, path: str, timeout: int = BACKEND_TIMEOUT_SECONDS, **kwargs):
+    last_error = None
+    for attempt in range(2):
+        try:
+            response = requests.request(
+                method,
+                f"{CRM_BACKEND_URL}{path}",
+                timeout=timeout,
+                **kwargs,
+            )
+            response.raise_for_status()
+            return response
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(2)
+    raise last_error
+
+
 def _get_json(path: str, fallback):
     try:
-        response = requests.get(f"{CRM_BACKEND_URL}{path}", timeout=8)
-        response.raise_for_status()
-        return response.json()
+        return _request_backend("GET", path).json()
     except Exception:
         return fallback
 
 
-def _post_json(path: str, payload: dict | list | None = None, timeout: int = 15):
-    return requests.post(f"{CRM_BACKEND_URL}{path}", json=payload, timeout=timeout)
+def _post_json(path: str, payload: dict | list | None = None, timeout: int = 90):
+    return _request_backend("POST", path, json=payload, timeout=timeout)
 
 
 def _render_suggestions() -> None:
@@ -240,14 +258,14 @@ def _agent_tab() -> None:
 
 def _analytics_tab() -> None:
     try:
-        campaigns_resp = requests.get(f"{CRM_BACKEND_URL}/campaigns", timeout=8).json()
+        campaigns_resp = _request_backend("GET", "/campaigns").json()
         campaigns = campaigns_resp.get("data", [])
-        overview = requests.get(
-            f"{CRM_BACKEND_URL}/customers/stats/overview",
-            timeout=8,
-        ).json()
+        overview = _request_backend("GET", "/customers/stats/overview").json()
     except Exception as exc:
-        st.error(f"Cannot reach backend: {exc}")
+        st.error(
+            "Cannot reach backend yet. Render free services can take about a minute "
+            f"to wake up; refresh once the backend is warm. Details: {exc}"
+        )
         st.stop()
 
     avg_delivery = (
