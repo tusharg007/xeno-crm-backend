@@ -40,7 +40,7 @@ router = APIRouter()
 # Index position enforces forward-only state transitions:
 #   index(new_event) must be > index(current_status), or event must be "failed".
 # This handles: duplicate callbacks, out-of-order delivery, provider retries.
-STATUS_ORDER = ["queued", "sent", "delivered", "opened", "clicked", "failed"]
+STATUS_ORDER = ["queued", "sent", "delivered", "read", "opened", "clicked", "failed"]
 
 
 def _parse_timestamp(value: str) -> datetime:
@@ -93,7 +93,12 @@ async def receive_receipt(
 
     campaign.total_delivered = db.query(func.count(Message.id)).filter(
         Message.campaign_id == campaign_id,
-        Message.status.in_(["delivered", "opened", "clicked"])
+        Message.status.in_(["delivered", "read", "opened", "clicked"])
+    ).scalar() or 0
+
+    campaign.total_read = db.query(func.count(Message.id)).filter(
+        Message.campaign_id == campaign_id,
+        Message.status.in_(["read", "opened", "clicked"])
     ).scalar() or 0
 
     campaign.total_opened = db.query(func.count(Message.id)).filter(

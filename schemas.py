@@ -104,9 +104,12 @@ class CampaignRead(BaseModel):
     status: str
     total_sent: int
     total_delivered: int
+    total_read: int
     total_opened: int
     total_clicked: int
     total_failed: int
+    total_attributed_orders: int
+    total_attributed_revenue: float
     created_at: datetime
     launched_at: Optional[datetime]
 
@@ -122,8 +125,22 @@ class CampaignRead(BaseModel):
 
     @computed_field
     @property
+    def read_rate(self) -> float:
+        return self.total_read / self.total_delivered if self.total_delivered > 0 else 0.0
+
+    @computed_field
+    @property
     def click_rate(self) -> float:
         return self.total_clicked / self.total_opened if self.total_opened > 0 else 0.0
+
+    @computed_field
+    @property
+    def attribution_rate(self) -> float:
+        return (
+            self.total_attributed_orders / self.total_sent
+            if self.total_sent > 0
+            else 0.0
+        )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,9 +153,12 @@ class MessageRead(BaseModel):
     status: str
     sent_at: Optional[datetime]
     delivered_at: Optional[datetime]
+    read_at: Optional[datetime]
     opened_at: Optional[datetime]
     clicked_at: Optional[datetime]
     failed_at: Optional[datetime]
+    attributed_order: bool
+    attributed_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -147,6 +167,11 @@ class ReceiptPayload(BaseModel):
     message_id: str
     event: str
     timestamp: str
+
+
+class OrderAttributionRequest(BaseModel):
+    campaign_id: str
+    order_amount: float
 
 
 class ChatRequest(BaseModel):

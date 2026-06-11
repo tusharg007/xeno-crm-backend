@@ -452,6 +452,7 @@ def _analytics_tab() -> None:
         campaigns_resp = _request_backend("GET", "/campaigns").json()
         campaigns = campaigns_resp.get("data", [])
         overview = _request_backend("GET", "/customers/stats/overview").json()
+        campaign_summary = _get_json("/campaigns/summary", {})
     except Exception as exc:
         st.error(
             "Cannot reach backend yet. Render free services can take about a minute "
@@ -471,12 +472,13 @@ def _analytics_tab() -> None:
         if campaigns
         else 0
     )
+    attributed_revenue = campaign_summary.get("total_attributed_revenue", 0.0)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total customers", f"{total_customers:,}")
     m2.metric("Campaigns run", total_campaigns)
     m3.metric("Avg delivery", f"{avg_delivery:.1f}%")
-    m4.metric("Avg open rate", f"{avg_open:.1f}%")
+    m4.metric("Attributed revenue", f"Rs {attributed_revenue:,.0f}")
 
     st.divider()
     st.subheader("Campaigns")
@@ -495,8 +497,10 @@ def _analytics_tab() -> None:
                     "Channel": campaign["channel"].title(),
                     "Sent": campaign["total_sent"],
                     "Delivered": f"{campaign.get('delivery_rate', 0) * 100:.1f}%",
+                    "Read": f"{campaign.get('read_rate', 0) * 100:.1f}%",
                     "Opened": f"{campaign.get('open_rate', 0) * 100:.1f}%",
                     "Clicked": f"{campaign.get('click_rate', 0) * 100:.1f}%",
+                    "Revenue": f"Rs {campaign.get('total_attributed_revenue', 0):,.0f}",
                     "Status": status_map.get(
                         campaign["status"],
                         campaign["status"].title(),
@@ -513,8 +517,10 @@ def _analytics_tab() -> None:
             selection_mode="single-row",
             column_config={
                 "Delivered": st.column_config.TextColumn(width="small"),
+                "Read": st.column_config.TextColumn(width="small"),
                 "Opened": st.column_config.TextColumn(width="small"),
                 "Clicked": st.column_config.TextColumn(width="small"),
+                "Revenue": st.column_config.TextColumn(width="small"),
                 "Sent": st.column_config.NumberColumn(width="small"),
             },
         )
@@ -522,6 +528,13 @@ def _analytics_tab() -> None:
         if selected.selection.rows:
             idx = selected.selection.rows[0]
             campaign = campaigns[idx]
+            performance = _get_json(f"/campaigns/{campaign['id']}/performance", {})
+            funnel = performance.get("funnel", {})
+            rates = performance.get("rates", {})
+            revenue = performance.get("revenue", {})
+            audience = performance.get("audience_breakdown", {})
+            timeline = performance.get("timeline", {})
+
             st.divider()
             st.markdown(
                 f"""
@@ -538,20 +551,39 @@ def _analytics_tab() -> None:
             col_f, col_d = st.columns([6, 4])
 
             with col_f:
-                st.caption("Delivery funnel")
+                st.caption("Performance funnel")
                 funnel_fig = go.Figure(
                     go.Funnel(
-                        y=["Sent", "Delivered", "Opened", "Clicked"],
+                        y=[
+                            "Sent",
+                            "Delivered",
+                            "Read",
+                            "Opened",
+                            "Clicked",
+                            "Attributed Orders",
+                        ],
                         x=[
-                            campaign["total_sent"],
-                            campaign["total_delivered"],
-                            campaign["total_opened"],
-                            campaign["total_clicked"],
+                            funnel.get("sent", campaign["total_sent"]),
+                            funnel.get("delivered", campaign["total_delivered"]),
+                            funnel.get("read", campaign.get("total_read", 0)),
+                            funnel.get("opened", campaign["total_opened"]),
+                            funnel.get("clicked", campaign["total_clicked"]),
+                            funnel.get(
+                                "attributed_orders",
+                                campaign.get("total_attributed_orders", 0),
+                            ),
                         ],
                         textinfo="value+percent initial",
                         textfont=dict(size=12, color="#374151"),
                         marker=dict(
-                            color=["#5B63FE", "#7B82FE", "#9DA3FE", "#BFC2FE"],
+                            color=[
+                                "#5B63FE",
+                                "#747BFE",
+                                "#8D93FE",
+                                "#A6AAFE",
+                                "#BFC2FE",
+                                "#22C55E",
+                            ],
                             line=dict(width=0),
                         ),
                         connector=dict(line=dict(color="rgba(0,0,0,0.06)", width=1)),
@@ -570,7 +602,11 @@ def _analytics_tab() -> None:
                 st.caption("Status breakdown")
                 delivered_only = max(
                     0,
-                    campaign["total_delivered"] - campaign["total_opened"],
+                    campaign["total_delivered"] - campaign.get("total_read", 0),
+                )
+                read_only = max(
+                    0,
+                    campaign.get("total_read", 0) - campaign["total_opened"],
                 )
                 opened_only = max(
                     0,
@@ -589,6 +625,7 @@ def _analytics_tab() -> None:
                     go.Pie(
                         labels=[
                             "Delivered",
+                            "Read",
                             "Opened",
                             "Clicked",
                             "Failed",
@@ -596,6 +633,7 @@ def _analytics_tab() -> None:
                         ],
                         values=[
                             delivered_only,
+                            read_only,
                             opened_only,
                             clicked,
                             failed,
@@ -607,6 +645,7 @@ def _analytics_tab() -> None:
                                 "#5B63FE",
                                 "#7B82FE",
                                 "#BFC2FE",
+                                "#D8DAFF",
                                 "#EF4444",
                                 "#E5E7EB",
                             ],
@@ -625,6 +664,125 @@ def _analytics_tab() -> None:
                     plot_bgcolor="rgba(0,0,0,0)",
                 )
                 st.plotly_chart(donut_fig, use_container_width=True)
+
+            avg_delivery_rate = campaign_summary.get("overall_delivery_rate", 0)
+            avg_open_rate = campaign_summary.get("overall_open_rate", 0)
+            avg_attr_rate = campaign_summary.get("overall_attribution_rate", 0)
+            rate_cols = st.columns(4)
+            rate_cols[0].metric(
+                "Delivery rate",
+                f"{rates.get('delivery_rate', 0) * 100:.1f}%",
+                f"{(rates.get('delivery_rate', 0) - avg_delivery_rate) * 100:.1f} pp",
+            )
+            rate_cols[1].metric(
+                "Open rate",
+                f"{rates.get('open_rate', 0) * 100:.1f}%",
+                f"{(rates.get('open_rate', 0) - avg_open_rate) * 100:.1f} pp",
+            )
+            rate_cols[2].metric(
+                "Click-to-open",
+                f"{rates.get('click_to_open_rate', 0) * 100:.1f}%",
+            )
+            rate_cols[3].metric(
+                "Attribution rate",
+                f"{rates.get('attribution_rate', 0) * 100:.1f}%",
+                f"{(rates.get('attribution_rate', 0) - avg_attr_rate) * 100:.1f} pp",
+            )
+
+            st.subheader("Revenue attribution")
+            total_revenue = revenue.get("total_attributed_revenue", 0.0)
+            if total_revenue > 0:
+                rev_cols = st.columns(3)
+                rev_cols[0].metric("Total revenue attributed", f"Rs {total_revenue:,.0f}")
+                rev_cols[1].metric(
+                    "Avg order value",
+                    f"Rs {revenue.get('avg_order_value', 0):,.0f}",
+                )
+                rev_cols[2].metric(
+                    "Revenue per message sent",
+                    f"Rs {revenue.get('revenue_per_message_sent', 0):,.2f}",
+                )
+            else:
+                st.info("No attributed orders yet - attribution window is 7 days from delivery.")
+
+            st.subheader("Audience breakdown")
+            city_col, performer_col = st.columns(2)
+            with city_col:
+                st.caption("Top cities")
+                by_city = audience.get("by_city", [])
+                if by_city:
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "City": row["city"],
+                                    "Sent": row["sent"],
+                                    "Open rate": row["open_rate"] * 100,
+                                }
+                                for row in by_city
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Open rate": st.column_config.ProgressColumn(
+                                "Open rate",
+                                min_value=0,
+                                max_value=100,
+                                format="%.1f%%",
+                            )
+                        },
+                    )
+                else:
+                    st.caption("No city performance yet.")
+            with performer_col:
+                st.caption("Top performers")
+                performers = audience.get("top_performers", [])
+                if performers:
+                    for performer in performers:
+                        badge = "Attributed" if performer.get("attributed") else performer.get("status", "").title()
+                        badge_color = "#22C55E" if performer.get("attributed") else "#5B63FE"
+                        st.markdown(
+                            f"""
+                        <div style="display:flex;justify-content:space-between;
+                                    padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06);">
+                            <div>
+                                <div style="font-weight:500;">{performer.get('name', '')}</div>
+                                <div style="font-size:12px;color:#888;">{performer.get('city', '')}</div>
+                            </div>
+                            <span style="height:24px;background:{badge_color}22;color:{badge_color};
+                                         padding:3px 9px;border-radius:12px;font-size:12px;">
+                                {badge}
+                            </span>
+                        </div>
+                        """,
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("No clicked or attributed customers yet.")
+
+            hourly_deliveries = timeline.get("hourly_deliveries", [])
+            if hourly_deliveries:
+                st.subheader("Delivery timeline")
+                timeline_fig = go.Figure(
+                    go.Scatter(
+                        x=[row["hour"] for row in hourly_deliveries],
+                        y=[row["count"] for row in hourly_deliveries],
+                        mode="lines+markers",
+                        line=dict(color="#5B63FE", width=3),
+                        marker=dict(color="#5B63FE", size=7),
+                    )
+                )
+                timeline_fig.update_layout(
+                    title="Delivery timeline",
+                    xaxis_title="Hours since launch",
+                    yaxis_title="Messages delivered",
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    height=260,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                )
+                st.plotly_chart(timeline_fig, use_container_width=True)
     else:
         st.markdown(
             """

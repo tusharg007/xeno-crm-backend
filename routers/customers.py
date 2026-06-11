@@ -6,8 +6,8 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Customer, Order
-from schemas import CustomerBulkCreate, CustomerRead, OrderBulkCreate
+from models import Campaign, Customer, Message, Order
+from schemas import CustomerBulkCreate, CustomerRead, OrderAttributionRequest, OrderBulkCreate
 
 
 router = APIRouter()
@@ -158,6 +158,57 @@ async def customer_stats_overview(db: Session = Depends(get_db)) -> dict[str, ob
         "lapsed_count": lapsed_count,
         "avg_order_value": round(float(avg_order_value), 2),
         "top_category": top_category_row[0] if top_category_row else "N/A",
+    }
+
+
+@router.post("/{customer_id}/order-attributed")
+async def attribute_customer_order(
+    customer_id: str,
+    payload: OrderAttributionRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Attribute an order to a campaign communication within a 7-day window."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=7)
+    eligible_statuses = ("delivered", "read", "opened", "clicked")
+
+    message = db.scalars(
+        select(Message)
+        .where(
+            Message.customer_id == customer_id,
+            Message.campaign_id == payload.campaign_id,
+            Message.status.in_(eligible_statuses),
+            Message.attributed_order == False,  # noqa: E712
+        )
+        .order_by(desc(Message.delivered_at), desc(Message.sent_at))
+        .limit(1)
+    ).first()
+
+    if (
+        message is None
+        or message.delivered_at is None
+        or message.delivered_at < cutoff
+    ):
+        return {"attributed": False, "reason": "no eligible message"}
+
+    campaign = db.get(Campaign, payload.campaign_id)
+    if campaign is None:
+        return {"attributed": False, "reason": "campaign not found"}
+
+    message.attributed_order = True
+    message.attributed_at = now
+    campaign.total_attributed_orders = (campaign.total_attributed_orders or 0) + 1
+    campaign.total_attributed_revenue = round(
+        float(campaign.total_attributed_revenue or 0.0) + payload.order_amount,
+        2,
+    )
+    db.commit()
+
+    return {
+        "attributed": True,
+        "campaign_id": payload.campaign_id,
+        "customer_id": customer_id,
+        "order_amount": payload.order_amount,
     }
 
 

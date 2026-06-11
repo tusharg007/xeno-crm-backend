@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from config import settings
@@ -26,3 +26,17 @@ def get_db() -> Generator[Session, None, None]:
 
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE campaigns ADD COLUMN total_read INTEGER DEFAULT 0",
+            "ALTER TABLE campaigns ADD COLUMN total_attributed_orders INTEGER DEFAULT 0",
+            "ALTER TABLE campaigns ADD COLUMN total_attributed_revenue FLOAT DEFAULT 0.0",
+            "ALTER TABLE messages ADD COLUMN read_at DATETIME",
+            "ALTER TABLE messages ADD COLUMN attributed_order BOOLEAN DEFAULT 0",
+            "ALTER TABLE messages ADD COLUMN attributed_at DATETIME",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass

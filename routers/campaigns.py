@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -50,6 +50,10 @@ def _personalize_message(template: str, customer: Customer, db: Session) -> str:
 
 def _chunks(items: list[dict], size: int) -> list[list[dict]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _rate(numerator: float, denominator: float) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
 
 
 async def _send_batch(client: httpx.AsyncClient, payload: list[dict]) -> None:
@@ -174,9 +178,157 @@ async def list_campaigns(db: Session = Depends(get_db)) -> dict[str, object]:
     }
 
 
+@router.get("/summary")
+async def campaign_summary(db: Session = Depends(get_db)) -> dict[str, object]:
+    """Overview of all campaigns with key performance and attribution metrics."""
+    campaigns = db.scalars(select(Campaign)).all()
+    total_campaigns = len(campaigns)
+    total_sent = sum(campaign.total_sent or 0 for campaign in campaigns)
+    total_delivered = sum(campaign.total_delivered or 0 for campaign in campaigns)
+    total_opened = sum(campaign.total_opened or 0 for campaign in campaigns)
+    total_attributed = sum(campaign.total_attributed_orders or 0 for campaign in campaigns)
+    total_revenue = round(
+        sum(campaign.total_attributed_revenue or 0.0 for campaign in campaigns),
+        2,
+    )
+
+    best = None
+    for campaign in campaigns:
+        open_rate = _rate(campaign.total_opened or 0, campaign.total_delivered or 0)
+        if best is None or open_rate > best["open_rate"]:
+            best = {"name": campaign.name, "open_rate": open_rate}
+
+    return {
+        "total_campaigns": total_campaigns,
+        "total_messages_sent": total_sent,
+        "overall_delivery_rate": _rate(total_delivered, total_sent),
+        "overall_open_rate": _rate(total_opened, total_delivered),
+        "overall_attribution_rate": _rate(total_attributed, total_sent),
+        "total_attributed_revenue": total_revenue,
+        "best_campaign": best or {"name": "N/A", "open_rate": 0.0},
+    }
+
+
 @router.get("/{campaign_id}", response_model=CampaignRead)
 async def get_campaign(campaign_id: str, db: Session = Depends(get_db)) -> Campaign:
     return _campaign_or_404(campaign_id, db)
+
+
+@router.get("/{campaign_id}/performance")
+async def campaign_performance(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return complete communication performance insights for a campaign."""
+    campaign = _campaign_or_404(campaign_id, db)
+    segment = db.get(Segment, campaign.segment_id)
+
+    sent = campaign.total_sent or 0
+    delivered = campaign.total_delivered or 0
+    read = campaign.total_read or 0
+    opened = campaign.total_opened or 0
+    clicked = campaign.total_clicked or 0
+    failed = campaign.total_failed or 0
+    attributed = campaign.total_attributed_orders or 0
+    revenue = round(float(campaign.total_attributed_revenue or 0.0), 2)
+
+    city_rows = db.execute(
+        select(
+            Customer.city,
+            func.count(Message.id).label("sent"),
+            func.sum(
+                case((Message.status.in_(["opened", "clicked"]), 1), else_=0)
+            ).label("opened"),
+            func.sum(case((Message.status == "clicked", 1), else_=0)).label("clicked"),
+        )
+        .join(Customer, Customer.id == Message.customer_id)
+        .where(Message.campaign_id == campaign_id)
+        .group_by(Customer.city)
+        .order_by(desc("sent"))
+        .limit(5)
+    ).all()
+    by_city = [
+        {
+            "city": row.city,
+            "sent": int(row.sent or 0),
+            "opened": int(row.opened or 0),
+            "clicked": int(row.clicked or 0),
+            "open_rate": _rate(row.opened or 0, row.sent or 0),
+        }
+        for row in city_rows
+    ]
+
+    performers = db.execute(
+        select(Customer.name, Customer.city, Message.status, Message.attributed_order)
+        .join(Customer, Customer.id == Message.customer_id)
+        .where(
+            Message.campaign_id == campaign_id,
+            (Message.status == "clicked") | (Message.attributed_order == True),  # noqa: E712
+        )
+        .order_by(desc(Message.attributed_order), desc(Message.clicked_at))
+        .limit(5)
+    ).all()
+    top_performers = [
+        {
+            "name": row.name,
+            "city": row.city,
+            "status": row.status,
+            "attributed": bool(row.attributed_order),
+        }
+        for row in performers
+    ]
+
+    launch_time = campaign.launched_at or campaign.created_at
+    delivered_messages = db.scalars(
+        select(Message.delivered_at)
+        .where(Message.campaign_id == campaign_id, Message.delivered_at.is_not(None))
+    ).all()
+    hourly_counts: dict[int, int] = {}
+    for delivered_at in delivered_messages:
+        hour = max(0, int((delivered_at - launch_time).total_seconds() // 3600))
+        hourly_counts[hour] = hourly_counts.get(hour, 0) + 1
+
+    return {
+        "campaign_id": campaign.id,
+        "campaign_name": campaign.name,
+        "segment_name": segment.name if segment else "Unknown segment",
+        "channel": campaign.channel,
+        "status": campaign.status,
+        "launched_at": campaign.launched_at.isoformat() if campaign.launched_at else None,
+        "funnel": {
+            "sent": sent,
+            "delivered": delivered,
+            "read": read,
+            "opened": opened,
+            "clicked": clicked,
+            "failed": failed,
+            "attributed_orders": attributed,
+        },
+        "rates": {
+            "delivery_rate": _rate(delivered, sent),
+            "read_rate": _rate(read, delivered),
+            "open_rate": _rate(opened, delivered),
+            "click_rate": _rate(clicked, opened),
+            "click_to_open_rate": _rate(clicked, opened),
+            "attribution_rate": _rate(attributed, sent),
+            "failure_rate": _rate(failed, sent),
+        },
+        "revenue": {
+            "total_attributed_revenue": revenue,
+            "avg_order_value": round(revenue / attributed, 2) if attributed else 0.0,
+            "revenue_per_message_sent": round(revenue / sent, 2) if sent else 0.0,
+        },
+        "audience_breakdown": {
+            "by_city": by_city,
+            "top_performers": top_performers,
+        },
+        "timeline": {
+            "hourly_deliveries": [
+                {"hour": hour, "count": hourly_counts[hour]}
+                for hour in sorted(hourly_counts)
+            ]
+        },
+    }
 
 
 @router.get("/{campaign_id}/messages")

@@ -121,12 +121,20 @@ def _schedule_channel_send(send_payloads: list[dict]) -> None:
 
 def _campaign_rates(campaign: Campaign) -> dict[str, float]:
     delivery_rate = campaign.total_delivered / campaign.total_sent if campaign.total_sent else 0.0
+    read_rate = campaign.total_read / campaign.total_delivered if campaign.total_delivered else 0.0
     open_rate = campaign.total_opened / campaign.total_delivered if campaign.total_delivered else 0.0
     click_rate = campaign.total_clicked / campaign.total_opened if campaign.total_opened else 0.0
+    attribution_rate = (
+        campaign.total_attributed_orders / campaign.total_sent
+        if campaign.total_sent
+        else 0.0
+    )
     return {
         "delivery_rate": round(delivery_rate, 3),
+        "read_rate": round(read_rate, 3),
         "open_rate": round(open_rate, 3),
         "click_rate": round(click_rate, 3),
+        "attribution_rate": round(attribution_rate, 3),
     }
 
 
@@ -409,14 +417,12 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
 
     @tool
     def get_campaign_analytics(campaign_id: str | None = None) -> dict:
-        """Fetch campaign performance statistics from the database.
+        """Get campaign performance stats including delivery rates and revenue attribution.
 
-        If campaign_id given: returns detailed stats for that specific campaign
-        including delivery_rate, open_rate, click_rate as floats (0.0-1.0).
-        If campaign_id is None: returns overview of the last 5 campaigns.
-
-        Call this when the marketer asks about performance, results, stats,
-        how a campaign did, open rates, click rates, or anything analytical.
+        Attribution tracks customers who placed an order within 7 days of
+        receiving the campaign. If campaign_id given: full performance report.
+        If None: overview of last 5 campaigns. Use this for revenue, ROI,
+        orders generated, attribution, delivery rates, open rates, and stats.
         """
         if campaign_id:
             campaign = db.get(Campaign, campaign_id)
@@ -430,14 +436,22 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
                         "name": campaign.name,
                         "sent": campaign.total_sent,
                         "delivered": campaign.total_delivered,
+                        "read": campaign.total_read,
                         "opened": campaign.total_opened,
                         "clicked": campaign.total_clicked,
                         "failed": campaign.total_failed,
+                        "attributed_orders": campaign.total_attributed_orders,
+                        "attributed_revenue": round(campaign.total_attributed_revenue or 0.0, 2),
                         "status": campaign.status,
                         **rates,
                     }
                 ],
-                "summary": f"{campaign.name} is {campaign.status} with {rates['delivery_rate']:.1%} delivery and {rates['click_rate']:.1%} click rate.",
+                "summary": (
+                    f"{campaign.name} is {campaign.status} with "
+                    f"{rates['delivery_rate']:.1%} delivery, "
+                    f"{rates['click_rate']:.1%} click rate, and "
+                    f"Rs {campaign.total_attributed_revenue or 0.0:,.0f} attributed revenue."
+                ),
             }
 
         campaigns = db.scalars(
@@ -451,12 +465,19 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
                     "name": campaign.name,
                     "sent": campaign.total_sent,
                     "status": campaign.status,
+                    "attributed_orders": campaign.total_attributed_orders,
+                    "attributed_revenue": round(campaign.total_attributed_revenue or 0.0, 2),
                     **_campaign_rates(campaign),
                 }
             )
+        total_revenue = sum(row["attributed_revenue"] for row in rows)
         return {
             "campaigns": rows,
-            "summary": f"Showing the latest {len(rows)} campaigns." if rows else "No campaigns have been launched yet.",
+            "summary": (
+                f"Showing the latest {len(rows)} campaigns with Rs {total_revenue:,.0f} attributed revenue."
+                if rows
+                else "No campaigns have been launched yet."
+            ),
         }
 
     return [

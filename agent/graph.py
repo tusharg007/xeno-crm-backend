@@ -87,6 +87,9 @@ Step 5 — Launch on approval
 Step 6 — Analytics
   When asked about stats or performance: call get_campaign_analytics.
   Present numbers clearly with context.
+  When asked about revenue, ROI, orders generated, or attribution:
+  use get_campaign_analytics and highlight the attributed_orders and
+  attributed_revenue fields.
 
 ACCURACY RULES:
 For category, product, gender buying-pattern, or "what are men/women buying"
