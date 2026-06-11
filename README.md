@@ -1,151 +1,221 @@
-# Xeno Mini CRM - StyleHub
+# Xeno Mini CRM
 
-Xeno Mini CRM is an AI-native campaign management system for StyleHub, an Indian fashion retailer, built for the Xeno FDE assignment 2026. It helps marketers find the right customer audience, save that audience as a reusable segment, draft personalized campaign copy, launch campaigns through a simulated channel service, and watch delivery analytics update from receipt callbacks.
+An AI-native campaign manager for retail brands. A marketer describes who they want
+to reach in plain English; the agent finds the audience, writes the message, and
+gates on human approval before launching. A separate channel service simulates async
+delivery and fires real-time callbacks, making the analytics dashboard update live.
 
-## Live Demo
+Built for Xeno's FDE Internship Drive 2026.
 
-- Frontend: https://xeno-crm-backend-5eeqqhufg62kjv6zlsuhvz.streamlit.app
-- API Docs: https://xeno-crm-backend-uelp.onrender.com/docs
-- Channel Service: https://xeno-channel-service-c1yr.onrender.com/health
+## Live demo
+
+| | |
+|---|---|
+| Frontend | [StyleHub CRM](https://xeno-crm-backend-5eeqqhufg62kjv6zlsuhvz.streamlit.app) |
+| API docs | [https://xeno-crm-backend-uelp.onrender.com/docs](https://xeno-crm-backend-uelp.onrender.com/docs) |
+| CRM health | [https://xeno-crm-backend-uelp.onrender.com/health](https://xeno-crm-backend-uelp.onrender.com/health) |
+| Channel health | [https://xeno-channel-service-c1yr.onrender.com/health](https://xeno-channel-service-c1yr.onrender.com/health) |
+| Walkthrough | Not recorded yet |
 
 ## Architecture
 
-```txt
-    ┌─────────────────────────────────────────────────────────┐
-    │                  Streamlit Frontend                     │
-    │   Chat Interface (Tab 1)    Analytics Dashboard (Tab 2) │
-    └──────────┬──────────────────────────┬───────────────────┘
-               │ POST /agent/chat         │ GET /campaigns
-               ▼                          ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                FastAPI CRM Backend                      │
-    │                                                         │
-    │  LangGraph Agent (agent/)     REST API (routers/)       │
-    │  ├─ Intent parsing            ├─ /customers             │
-    │  ├─ 5 tools                   ├─ /segments              │
-    │  ├─ HITL approval gate        ├─ /campaigns             │
-    │  └─ Session memory            └─ /receipt (callbacks)   │
-    │                                                         │
-    │              SQLite — 5 tables                          │
-    │   customers│orders│segments│campaigns│messages          │
-    └──────────────────────┬──────────────────────────────────┘
-                           │ POST /send-batch (chunks of 50)
-                           ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │           Channel Service (separate deploy)             │
-    │  Receives messages → simulates delivery lifecycle       │
-    │  Async: sent → delivered → opened → clicked             │
-    │  Fires callbacks → POST /receipt on CRM backend         │
-    └─────────────────────────────────────────────────────────┘
+Two independently deployed services communicating only via HTTP:
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                  Streamlit Frontend                     │
+│   Chat Interface (Tab 1)    Analytics Dashboard (Tab 2) │
+└──────────┬──────────────────────────┬───────────────────┘
+           │ POST /agent/chat         │ GET /campaigns
+           ▼                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                FastAPI CRM Backend                      │
+│                                                         │
+│  LangGraph Agent (agent/)     REST API (routers/)       │
+│  ├─ Intent parsing            ├─ /customers             │
+│  ├─ 5 tools                   ├─ /segments              │
+│  ├─ HITL approval gate        ├─ /campaigns             │
+│  └─ In-memory session store   └─ /receipt (callbacks)   │
+│                                                         │
+│              SQLite - 5 tables                          │
+│   customers | orders | segments | campaigns | messages  │
+└──────────────────────┬──────────────────────────────────┘
+                       │ POST /send-batch (chunks of 50)
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│           Channel Service (separate deploy)             │
+│  Receives messages -> simulates delivery lifecycle      │
+│  Async: sent -> delivered -> opened -> clicked          │
+│  Fires callbacks -> POST /receipt on CRM backend        │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Key Technical Decisions
+## What makes this AI-native
+
+The LangGraph agent doesn't just generate text. It reasons about customer data,
+executes database queries via tools, drafts personalized copy, and maintains
+conversational state across turns. The marketer never touches a form.
+
+The HITL approval gate is a deliberate design decision: when the agent has built
+a segment and drafted a message, it embeds `AWAITING_APPROVAL:[segment_id]` as
+a signal token in its response. The graph parses this signal, sets
+`awaiting_approval=True` in state, and surfaces a confirmation card in the UI.
+`launch_campaign` cannot be called until the marketer explicitly approves; the
+system prompt forbids it. This prevents a misunderstood instruction from
+firing a campaign to thousands of real customers.
+
+## Key technical decisions
 
 | Decision | What I did | Why | At production scale |
 |---|---|---|---|
-| Database | SQLite | Zero config, no infra needed | PostgreSQL with read replicas for analytics |
-| Channel simulation | Async callbacks with per-channel delay+rate profiles | Mirrors real provider lifecycle (Twilio, MSG91) | Redis queue + dead-letter queue for guaranteed delivery |
-| Agent memory | In-memory session dict | Simple, demo-safe, no external dependency | Redis or DynamoDB for distributed session state |
-| Callback idempotency | STATUS_ORDER index comparison | Prevents backward state on out-of-order callbacks | Idempotency keys + exactly-once semantics via DB constraint |
-| Campaign launch | Batch send in chunks of 50 via asyncio.gather | Avoids thundering herd on channel service | Message queue (SQS/Kafka) between CRM and channel service |
-| Message personalization | String template substitution {name},{city},{last_category} | Predictable, fast, testable | LLM-personalized per recipient with full purchase context |
+| Database | SQLite | Zero config, sufficient for demo scope | PostgreSQL with read replicas for analytics |
+| LLM provider | Groq with Llama 3.3 70B | Fast responses on the free tier and OpenAI-compatible chat semantics | Provider routing, fallbacks, and spend controls |
+| Channel simulation | Async callbacks with per-channel probability profiles | Mirrors real provider lifecycle such as Twilio or MSG91 | Redis queue + dead-letter queue for guaranteed delivery |
+| Callback idempotency | `STATUS_ORDER` index comparison | Prevents backward state on out-of-order or duplicate callbacks | Idempotency keys + exactly-once semantics via DB unique constraint |
+| Agent memory | In-memory session dict, module-level | Simple, demo-safe, no external dependency | Redis with TTL for distributed session state |
+| Campaign launch | Batch POST in chunks of 50 via async fan-out | Avoids thundering herd on channel service | Message queue such as SQS or Kafka between CRM and channel service |
+| HITL gate | Signal token in agent response text | Avoids complex graph branching, keeps state machine simple | Dedicated approval workflow with audit log and rollback |
 
-## Data Model
+## The callback loop in detail
 
-`Customer` stores profile, RFM aggregates, and last-order state so audience queries are fast without recomputing order history on every request.
-`Order` stores retail purchase events with category, amount, product, channel, and timestamp so the segment engine can target behavior like ethnic wear buyers or high-value customers.
-`Segment` stores `filter_rules` as a JSON string because the AI agent can create flexible audience definitions without requiring a schema migration for every new targeting dimension, and `created_by` distinguishes human-created audiences from AI-created ones.
-`Campaign` denormalizes aggregate counters such as sent, delivered, opened, clicked, and failed so analytics reads are O(1) for dashboard refreshes.
-`Message` stores one row per recipient with per-event timestamps, which enables funnel analysis and idempotent callback handling without expensive joins.
+When a campaign launches, the CRM sends campaign messages to the channel service
+`/send-batch` endpoint. The channel service simulates delivery asynchronously:
+each message goes through sent -> delivered -> opened -> clicked with
+channel-specific probability profiles (WhatsApp: 55% open rate, SMS: 35%,
+Email: 25%).
 
-## Local Setup
+Each state transition fires a POST back to `/receipt` on the CRM. The receipt
+handler validates forward progress via `STATUS_ORDER` index comparison, updates
+the message's status and timestamp, then recalculates campaign aggregate counters
+using SQL COUNT subqueries rather than Python-side counting to stay safe under
+concurrent callbacks. The campaign auto-completes when all messages reach a
+terminal state.
+
+## Data model
+
+Five tables. Key design choices:
+
+**`filter_rules` stored as a JSON string on Segment**: lets the agent generate and
+store arbitrary filter combinations without schema migrations. The agent writes
+`{"recency_days": 60, "gender": "F", "category": "Ethnic Wear"}` and the
+`execute_segment_filter` function dynamically builds the SQL WHERE clause.
+
+**Campaign aggregate counters denormalized**: `total_delivered`, `total_opened`,
+and related counters are updated on every `/receipt` callback via SQL COUNT
+subqueries. Analytics reads are O(1), with no aggregation at read time.
+
+**Per-event timestamps on Message**: `sent_at`, `delivered_at`, `opened_at`,
+`clicked_at`, and `failed_at` enable time-to-open analysis and delivery funnel
+charts without joining to a separate events table.
+
+**`created_by` on Segment (`human` or `ai`)**: distinguishes agent-created
+segments from manually built ones.
+
+## Local setup
 
 ```bash
-# 1. Clone both repositories
-git clone https://github.com/tusharg007/xeno-crm-backend.git
-git clone https://github.com/tusharg007/xeno-channel-service.git
-
-# 2. Set up the CRM backend
+git clone https://github.com/tusharg007/xeno-crm-backend
 cd xeno-crm-backend
-python -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env        # add GROQ_API_KEY
 
-# 3. Configure backend environment
-cp .env.example .env
-# Edit .env and set:
-# GROQ_API_KEY=your_groq_key
-# LLM_PROVIDER=groq
-# LLM_MODEL=llama-3.3-70b-versatile
-# CHANNEL_SERVICE_URL=http://localhost:8001
-# DATABASE_URL=sqlite:///./xeno_crm.db
+python seed_data.py         # seeds 200 customers + 650-800 orders
+uvicorn main:app --reload   # starts on :8000, auto-seeds if DB empty
 
-# 4. Create and seed the CRM database
-python seed_data.py
-
-# 5. Start the CRM backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# 6. In another terminal, set up the channel service
-cd ../xeno-channel-service
-python -m venv .venv
-source .venv/bin/activate
+# In a second terminal:
+git clone https://github.com/tusharg007/xeno-channel-service
+cd xeno-channel-service
 pip install -r requirements.txt
 cp .env.example .env
+uvicorn main:app --port 8001 --reload
 
-# 7. Start the channel service
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-
-# 8. In another terminal, start the Streamlit frontend
-cd ../xeno-crm-backend
-source .venv/bin/activate
+# In a third terminal:
+cd xeno-crm-backend
 streamlit run streamlit_app.py
 ```
 
-Local URLs:
+## Required environment
 
-- Streamlit frontend: `http://localhost:8501`
-- CRM backend: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
-- Channel service: `http://localhost:8001`
+Backend:
 
-## Project Structure
-
-```txt
-xeno-crm-backend/
-├── agent/
-│   ├── graph.py              # LangGraph state machine, HITL approval gate, session memory
-│   └── tools.py              # 5 DB-backed agent tools
-├── routers/
-│   ├── customers.py          # Customer ingestion, order ingestion, stats
-│   ├── segments.py           # Segment CRUD and filter engine
-│   ├── campaigns.py          # Campaign CRUD, launch, message creation
-│   └── receipts.py           # Delivery callback idempotency and analytics counters
-├── .streamlit/
-│   └── config.toml           # Streamlit Cloud/server theme config
-├── config.py                 # Environment settings
-├── database.py               # SQLAlchemy engine/session/base helpers
-├── main.py                   # FastAPI app, router wiring, agent chat endpoint
-├── models.py                 # SQLAlchemy 2.0 ORM models
-├── schemas.py                # Pydantic v2 schemas
-├── seed_data.py              # StyleHub customer/order seed generator
-├── streamlit_app.py          # Chat UI and analytics dashboard
-├── requirements.txt          # Backend + local frontend dependencies
-├── requirements_streamlit.txt # Streamlit Cloud-only dependencies
-└── render.yaml               # Render backend deployment blueprint
-
-xeno-channel-service/
-├── main.py                   # FastAPI send/send-batch endpoints
-├── simulator.py              # Async delivery lifecycle simulator
-├── requirements.txt          # Channel service dependencies
-├── render.yaml               # Render channel service deployment blueprint
-└── README.md                 # Channel service usage and lifecycle docs
+```env
+GROQ_API_KEY=your_groq_key_here
+LLM_PROVIDER=groq
+LLM_MODEL=llama-3.3-70b-versatile
+CHANNEL_SERVICE_URL=http://localhost:8001
+DATABASE_URL=sqlite:///./xeno_crm.db
 ```
 
-## What I Would Add With More Time
+Channel service:
 
-1. WebSocket for live dashboard — replace 4-second polling with push events.
-2. LLM-personalized messages per recipient using full purchase history — improve relevance beyond template tokens.
-3. Predictive churn scoring from RFM features surfaced in the agent — help marketers prioritize high-risk customers.
-4. Multi-tenant support — add `brand_id` to all tables, scope all queries.
-5. Campaign scheduling — launch at a future datetime via APScheduler.
+```env
+CRM_RECEIPT_URL=http://localhost:8000/receipt
+PORT=8001
+```
+
+Streamlit Cloud:
+
+```toml
+CRM_BACKEND_URL = "https://xeno-crm-backend-uelp.onrender.com"
+```
+
+## Project structure
+
+```text
+xeno-crm-backend/
+├── main.py              # FastAPI app, startup auto-seed, /agent/chat, /demo/reset
+├── config.py            # Pydantic settings: DATABASE_URL, GROQ_API_KEY, CHANNEL_SERVICE_URL
+├── database.py          # SQLAlchemy engine, SessionLocal, Base, get_db()
+├── models.py            # 5 SQLAlchemy 2.0 models (Mapped[] style)
+├── schemas.py           # Pydantic v2 schemas with computed delivery rates
+├── seed_data.py         # 200 customers + orders across 4 RFM segments
+├── streamlit_app.py     # Frontend: AI chat tab + analytics dashboard
+├── routers/
+│   ├── customers.py     # CRUD + /stats/overview (RFM breakdown)
+│   ├── segments.py      # CRUD + execute_segment_filter() engine
+│   ├── campaigns.py     # Create, launch with batch send
+│   └── receipts.py      # Async callback handler with idempotency
+└── agent/
+    ├── tools.py         # 5 LangGraph tools with db session injection
+    └── graph.py         # StateGraph, HITL gate, in-memory session store
+
+xeno-channel-service/
+├── main.py              # POST /send, POST /send-batch
+└── simulator.py         # DeliverySimulator with per-channel probability profiles
+```
+
+## Smoke tests
+
+```bash
+curl https://xeno-crm-backend-uelp.onrender.com/health
+curl https://xeno-crm-backend-uelp.onrender.com/customers/stats/overview
+curl https://xeno-channel-service-c1yr.onrender.com/health
+```
+
+Expected:
+
+- CRM health returns `{"status":"ok","service":"xeno-crm"}`.
+- Customer stats show 200 seeded customers and RFM counts.
+- Channel health returns `{"status":"ok","service":"xeno-channel-service"}`.
+- Streamlit sidebar shows customer count.
+- Full loop works: find -> draft -> approve -> launch -> Analytics updates live.
+
+## What I would add with more time
+
+1. **WebSocket for live dashboard**: replace 4-second polling with a WebSocket
+   connection that pushes receipt events to the frontend in real time.
+
+2. **LLM-personalized messages per recipient**: instead of string template
+   substitution, give the LLM each customer's purchase history and generate a
+   unique message for each recipient.
+
+3. **Predictive churn scoring**: use the RFM features already in the data model
+   to train a churn model; surface a risk score on each customer profile and let
+   the agent reference it when building segments.
+
+4. **Multi-tenant architecture**: add `brand_id` to all tables and scope every
+   query by it; the current single-tenant design supports this with one migration.
+
+5. **Campaign scheduling**: allow the agent to schedule a campaign for a future
+   datetime. "Send this tomorrow morning at 10am IST" is a natural language
+   instruction the agent could parse and honour.

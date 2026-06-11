@@ -26,7 +26,7 @@ Design decisions:
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -54,17 +54,6 @@ def _status_index(status: str) -> int:
     if status in STATUS_ORDER:
         return STATUS_ORDER.index(status)
     return -1
-
-
-def _count_messages(campaign_id: str, statuses: tuple[str, ...], db: Session) -> int:
-    return (
-        db.scalar(
-            select(func.count())
-            .select_from(Message)
-            .where(Message.campaign_id == campaign_id, Message.status.in_(statuses))
-        )
-        or 0
-    )
 
 
 @router.post("/receipt")
@@ -100,17 +89,30 @@ async def receive_receipt(
     # concurrent callbacks for the same campaign could cause race conditions
     # where two requests read the same value and both increment it, losing one.
     # SQL COUNT runs atomically inside the database transaction.
-    campaign.total_delivered = _count_messages(
-        campaign.id,
-        ("delivered", "opened", "clicked"),
-        db,
-    )
-    campaign.total_opened = _count_messages(campaign.id, ("opened", "clicked"), db)
-    campaign.total_clicked = _count_messages(campaign.id, ("clicked",), db)
-    campaign.total_failed = _count_messages(campaign.id, ("failed",), db)
+    campaign_id = message.campaign_id
 
-    terminal = campaign.total_delivered + campaign.total_failed
-    if campaign.total_sent > 0 and terminal >= campaign.total_sent:
+    campaign.total_delivered = db.query(func.count(Message.id)).filter(
+        Message.campaign_id == campaign_id,
+        Message.status.in_(["delivered", "opened", "clicked"])
+    ).scalar() or 0
+
+    campaign.total_opened = db.query(func.count(Message.id)).filter(
+        Message.campaign_id == campaign_id,
+        Message.status.in_(["opened", "clicked"])
+    ).scalar() or 0
+
+    campaign.total_clicked = db.query(func.count(Message.id)).filter(
+        Message.campaign_id == campaign_id,
+        Message.status == "clicked"
+    ).scalar() or 0
+
+    campaign.total_failed = db.query(func.count(Message.id)).filter(
+        Message.campaign_id == campaign_id,
+        Message.status == "failed"
+    ).scalar() or 0
+
+    terminal_count = campaign.total_delivered + campaign.total_failed
+    if campaign.total_sent > 0 and terminal_count >= campaign.total_sent:
         campaign.status = "completed"
 
     db.commit()
