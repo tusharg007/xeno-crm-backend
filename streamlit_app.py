@@ -21,9 +21,9 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-.block-container { padding-top: 1.5rem !important; }
+.block-container { padding-top: 4.25rem !important; }
 [data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,0.08); }
-[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
+[data-testid="stSidebar"] .block-container { padding-top: 2.25rem; }
 [data-testid="stMetric"] {
     background: rgba(91,99,254,0.04);
     border: 1px solid rgba(91,99,254,0.12);
@@ -32,6 +32,9 @@ st.markdown(
 }
 [data-testid="stMetricValue"] { font-size: 1.75rem !important; }
 [data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; }
+div[data-testid="stTabs"] { margin-top: 0.25rem; }
+div[data-testid="stTabs"] button { min-height: 2.5rem; }
+h1, h2, h3 { line-height: 1.25 !important; padding-top: 0.35rem; }
 .stButton > button[kind="primary"] {
     background: #5B63FE !important;
     border: none !important;
@@ -840,14 +843,8 @@ def _agent_tab() -> None:
                         st.error(f"Xeno could not respond: {exc}")
 
     with col_preview:
-        st.markdown(
-            """
-        <div style="background:rgba(91,99,254,0.03);
-                    border:1px solid rgba(91,99,254,0.12);
-                    border-radius:12px;padding:1rem 1.25rem;min-height:220px;">
-        """,
-            unsafe_allow_html=True,
-        )
+        preview_card = st.container(border=True)
+    with preview_card:
         st.markdown("**Campaign preview**")
 
         seg_prev = st.session_state.get("segment_preview")
@@ -949,8 +946,6 @@ def _agent_tab() -> None:
                         help="Agent will ask for confirmation first",
                         use_container_width=True,
                     )
-
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 _init_session_state()
