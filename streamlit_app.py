@@ -323,7 +323,7 @@ def _agent_tab_legacy() -> None:
                         )
 
 
-def _analytics_tab() -> None:
+def _analytics_tab_legacy() -> None:
     try:
         campaigns_resp = _request_backend("GET", "/campaigns").json()
         campaigns = campaigns_resp.get("data", [])
@@ -440,6 +440,216 @@ def _analytics_tab() -> None:
     running = any(c["status"] == "running" for c in campaigns)
     if running:
         st.markdown("🔴 **Live** - refreshing every 4 seconds as deliveries arrive")
+        time.sleep(4)
+        st.rerun()
+
+
+def _analytics_tab() -> None:
+    try:
+        campaigns_resp = _request_backend("GET", "/campaigns").json()
+        campaigns = campaigns_resp.get("data", [])
+        overview = _request_backend("GET", "/customers/stats/overview").json()
+    except Exception as exc:
+        st.error(
+            "Cannot reach backend yet. Render free services can take about a minute "
+            f"to wake up; refresh once the backend is warm. Details: {exc}"
+        )
+        st.stop()
+
+    total_customers = overview.get("total_customers", 0)
+    total_campaigns = len(campaigns)
+    avg_delivery = (
+        sum(c.get("delivery_rate", 0) for c in campaigns) / len(campaigns) * 100
+        if campaigns
+        else 0
+    )
+    avg_open = (
+        sum(c.get("open_rate", 0) for c in campaigns) / len(campaigns) * 100
+        if campaigns
+        else 0
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total customers", f"{total_customers:,}")
+    m2.metric("Campaigns run", total_campaigns)
+    m3.metric("Avg delivery", f"{avg_delivery:.1f}%")
+    m4.metric("Avg open rate", f"{avg_open:.1f}%")
+
+    st.divider()
+    st.subheader("Campaigns")
+
+    if campaigns:
+        status_map = {
+            "running": "Running",
+            "completed": "Completed",
+            "draft": "Draft",
+        }
+        rows = []
+        for campaign in campaigns:
+            rows.append(
+                {
+                    "Campaign": campaign["name"],
+                    "Channel": campaign["channel"].title(),
+                    "Sent": campaign["total_sent"],
+                    "Delivered": f"{campaign.get('delivery_rate', 0) * 100:.1f}%",
+                    "Opened": f"{campaign.get('open_rate', 0) * 100:.1f}%",
+                    "Clicked": f"{campaign.get('click_rate', 0) * 100:.1f}%",
+                    "Status": status_map.get(
+                        campaign["status"],
+                        campaign["status"].title(),
+                    ),
+                }
+            )
+        df = pd.DataFrame(rows)
+
+        selected = st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            column_config={
+                "Delivered": st.column_config.TextColumn(width="small"),
+                "Opened": st.column_config.TextColumn(width="small"),
+                "Clicked": st.column_config.TextColumn(width="small"),
+                "Sent": st.column_config.NumberColumn(width="small"),
+            },
+        )
+
+        if selected.selection.rows:
+            idx = selected.selection.rows[0]
+            campaign = campaigns[idx]
+            st.divider()
+            st.markdown(
+                f"""
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
+                <div style="font-size:16px;font-weight:600;">{campaign['name']}</div>
+                <div style="background:rgba(91,99,254,0.1);color:#5B63FE;
+                            padding:3px 12px;border-radius:20px;font-size:12px;
+                            font-weight:500;">{campaign['channel'].title()}</div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+            col_f, col_d = st.columns([6, 4])
+
+            with col_f:
+                st.caption("Delivery funnel")
+                funnel_fig = go.Figure(
+                    go.Funnel(
+                        y=["Sent", "Delivered", "Opened", "Clicked"],
+                        x=[
+                            campaign["total_sent"],
+                            campaign["total_delivered"],
+                            campaign["total_opened"],
+                            campaign["total_clicked"],
+                        ],
+                        textinfo="value+percent initial",
+                        textfont=dict(size=12, color="#374151"),
+                        marker=dict(
+                            color=["#5B63FE", "#7B82FE", "#9DA3FE", "#BFC2FE"],
+                            line=dict(width=0),
+                        ),
+                        connector=dict(line=dict(color="rgba(0,0,0,0.06)", width=1)),
+                    )
+                )
+                funnel_fig.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    height=240,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(size=12),
+                )
+                st.plotly_chart(funnel_fig, use_container_width=True)
+
+            with col_d:
+                st.caption("Status breakdown")
+                delivered_only = max(
+                    0,
+                    campaign["total_delivered"] - campaign["total_opened"],
+                )
+                opened_only = max(
+                    0,
+                    campaign["total_opened"] - campaign["total_clicked"],
+                )
+                clicked = campaign["total_clicked"]
+                failed = campaign["total_failed"]
+                in_transit = max(
+                    0,
+                    campaign["total_sent"]
+                    - campaign["total_delivered"]
+                    - campaign["total_failed"],
+                )
+
+                donut_fig = go.Figure(
+                    go.Pie(
+                        labels=[
+                            "Delivered",
+                            "Opened",
+                            "Clicked",
+                            "Failed",
+                            "In transit",
+                        ],
+                        values=[
+                            delivered_only,
+                            opened_only,
+                            clicked,
+                            failed,
+                            in_transit,
+                        ],
+                        hole=0.55,
+                        marker=dict(
+                            colors=[
+                                "#5B63FE",
+                                "#7B82FE",
+                                "#BFC2FE",
+                                "#EF4444",
+                                "#E5E7EB",
+                            ],
+                            line=dict(width=0),
+                        ),
+                        textfont=dict(size=10),
+                        textposition="outside",
+                    )
+                )
+                donut_fig.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=40),
+                    height=240,
+                    showlegend=True,
+                    legend=dict(orientation="h", y=-0.2, font=dict(size=10)),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                )
+                st.plotly_chart(donut_fig, use_container_width=True)
+    else:
+        st.markdown(
+            """
+        <div style="text-align:center;padding:3rem;color:#888;">
+            <div style="font-size:24px;margin-bottom:8px;">&#128202;</div>
+            No campaigns yet. Use the AI Agent tab to create and launch one.
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+    running_campaigns = [c for c in campaigns if c["status"] == "running"]
+    if running_campaigns:
+        campaign_label = "campaigns" if len(running_campaigns) > 1 else "campaign"
+        st.markdown(
+            f"""
+        <div style="display:flex;align-items:center;gap:8px;margin-top:1rem;
+                    padding:8px 12px;background:rgba(34,197,94,0.08);
+                    border:1px solid rgba(34,197,94,0.2);border-radius:8px;
+                    font-size:13px;color:#166534;">
+            <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;
+                         display:inline-block;"></span>
+            <strong>{len(running_campaigns)} {campaign_label} live</strong>
+            - refreshing every 4 seconds as deliveries arrive
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
         time.sleep(4)
         st.rerun()
 
