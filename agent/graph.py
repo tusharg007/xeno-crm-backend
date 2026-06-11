@@ -24,15 +24,19 @@ import json
 import logging
 import operator
 import re
+from datetime import datetime
 from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
+from sqlalchemy import func, select
 
-from agent.tools import get_tools
+from agent.tools import CATEGORY_ALIASES, get_tools
 from config import settings
 from database import SessionLocal
+from models import Customer, Order, Segment
+from routers.segments import execute_segment_filter
 
 
 logger = logging.getLogger(__name__)
@@ -122,6 +126,204 @@ def _fallback_response(state: AgentState) -> dict:
         "final_response": "Groq is not configured yet. Add `GROQ_API_KEY` to `.env` to use the AI campaign manager.",
         "awaiting_approval": False,
     }
+
+
+def _normalize_gender(text: str) -> str | None:
+    lowered = text.lower()
+    if any(word in lowered for word in [" men", "men ", "male", " man "]):
+        return "M"
+    if any(word in lowered for word in [" women", "women ", "female", " woman "]):
+        return "F"
+    return None
+
+
+def _normalize_category_from_text(text: str) -> str | None:
+    lowered = text.lower()
+    for alias, category in CATEGORY_ALIASES.items():
+        if alias in lowered:
+            return category
+    return None
+
+
+def _sample_customers(customer_ids: list[str], db) -> list[dict]:
+    if not customer_ids:
+        return []
+    now = datetime.utcnow()
+    customers = db.scalars(
+        select(Customer).where(Customer.id.in_(customer_ids)).limit(5)
+    ).all()
+    return [
+        {
+            "name": customer.name,
+            "city": customer.city,
+            "last_order_days_ago": (now - customer.last_order_date).days
+            if customer.last_order_date
+            else None,
+            "total_spend": round(customer.total_spend, 0),
+        }
+        for customer in customers
+    ]
+
+
+def _format_customer_sample(sample: list[dict]) -> str:
+    lines = []
+    for customer in sample[:3]:
+        days = customer.get("last_order_days_ago")
+        days_text = f"{days} days since last order" if days is not None else "no orders yet"
+        lines.append(f"* {customer['name']} ({customer['city']}, {days_text})")
+    return "\n".join(lines)
+
+
+def _segment_preview_response(filter_rules: dict, db) -> dict:
+    customer_ids = execute_segment_filter(filter_rules, db)
+    sample = _sample_customers(customer_ids, db)
+    preview = {
+        "count": len(customer_ids),
+        "sample": sample,
+        "filter_rules": filter_rules,
+        "filter_summary": f"Matched customers using filters: {filter_rules}.",
+    }
+    if not customer_ids:
+        response = "I found 0 customers matching that profile. Try relaxing the filters."
+    else:
+        response = (
+            f"I found {len(customer_ids)} customers matching that profile.\n"
+            "Here's a sample:\n"
+            f"{_format_customer_sample(sample)}\n\n"
+            "Want me to save this audience and draft a message?"
+        )
+    return {
+        "response": response,
+        "segment_preview": preview,
+        "campaign_draft": None,
+        "awaiting_approval": False,
+        "pending_segment_id": None,
+    }
+
+
+def _category_insights_response(gender: str | None, db) -> dict:
+    query = (
+        db.query(
+            Order.category.label("category"),
+            func.count(Order.id).label("order_count"),
+            func.count(func.distinct(Customer.id)).label("customer_count"),
+            func.round(func.sum(Order.amount), 2).label("total_spend"),
+        )
+        .join(Customer, Customer.id == Order.customer_id)
+    )
+    if gender:
+        query = query.filter(Customer.gender == gender)
+    rows = query.group_by(Order.category).order_by(func.count(Order.id).desc()).all()
+    audience = "Men" if gender == "M" else "Women" if gender == "F" else "Customers"
+    if not rows:
+        response = f"{audience} have no orders yet."
+    else:
+        lines = [
+            f"- {row.category}: {int(row.customer_count)} customers, "
+            f"{int(row.order_count)} orders, Rs {float(row.total_spend or 0):,.0f} spend"
+            for row in rows
+        ]
+        response = f"{audience} are buying from these categories:\n" + "\n".join(lines)
+    return {
+        "response": response,
+        "segment_preview": None,
+        "campaign_draft": None,
+        "awaiting_approval": False,
+        "pending_segment_id": None,
+    }
+
+
+def _draft_for_saved_segment(session: dict, db) -> dict | None:
+    preview = session.get("segment_preview") or {}
+    filter_rules = preview.get("filter_rules")
+    if not filter_rules:
+        return None
+
+    name = "AI Audience"
+    if "category" in filter_rules:
+        name = f"{filter_rules['category']} Audience"
+    elif filter_rules.get("max_orders") == 2:
+        name = "One-time Buyers"
+    elif "recency_days" in filter_rules:
+        name = "At-risk Audience"
+
+    segment = Segment(
+        name=name,
+        description=preview.get("filter_summary", "AI-generated audience"),
+        filter_rules=json.dumps(filter_rules),
+        customer_count=preview.get("count", 0),
+        created_by="ai",
+    )
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+
+    variants = [
+        "Hey {name}, we saved a special StyleHub offer for you. Come back and explore today.",
+        "Hi {name}, your next StyleHub pick is waiting. Enjoy 20% off on your favourites.",
+        "{name}, refresh your wardrobe with a limited StyleHub offer today.",
+    ]
+    draft = {
+        "segment_id": segment.id,
+        "segment_name": segment.name,
+        "customer_count": segment.customer_count,
+        "variants": variants,
+        "recommended": variants[0],
+    }
+    return {
+        "response": (
+            f"I've saved this audience as \"{segment.name}\" "
+            f"with {segment.customer_count} customers. Here are three message variants:\n"
+            f"* {variants[0]}\n* {variants[1]}\n* {variants[2]}\n\n"
+            "Choose a variant and launch when ready."
+        ),
+        "segment_preview": preview,
+        "campaign_draft": draft,
+        "awaiting_approval": True,
+        "pending_segment_id": segment.id,
+    }
+
+
+def _deterministic_response(message: str, session: dict, db) -> dict | None:
+    lowered = message.lower()
+    tokens = set(re.findall(r"[a-z]+", lowered))
+    wants_save = bool(tokens & {"yes", "save", "draft", "approve", "approved"})
+    if wants_save:
+        saved = _draft_for_saved_segment(session, db)
+        if saved:
+            return saved
+
+    gender = _normalize_gender(f" {lowered} ")
+    category = _normalize_category_from_text(lowered)
+
+    if "what" in lowered and ("buying" in lowered or "categories" in lowered):
+        return _category_insights_response(gender, db)
+
+    filter_rules = {}
+    if "one-time" in lowered or "one time" in lowered:
+        filter_rules["max_orders"] = 2
+        filter_rules["recency_days"] = 180
+    if "least loyal" in lowered or "lapsed" in lowered:
+        filter_rules["recency_days"] = 90
+    if "at risk" in lowered or "at-risk" in lowered:
+        filter_rules["recency_days"] = 60
+        filter_rules["max_spend"] = 10000
+    if gender:
+        filter_rules["gender"] = gender
+    if category:
+        filter_rules["category"] = category
+    recency_match = re.search(r"(\d+)\+?\s*days", lowered)
+    if recency_match:
+        filter_rules["recency_days"] = int(recency_match.group(1))
+
+    is_audience_query = any(
+        phrase in lowered
+        for phrase in ["find", "show me", "audience", "customers", "buyers", "bought"]
+    )
+    if filter_rules and is_audience_query:
+        return _segment_preview_response(filter_rules, db)
+
+    return None
 
 
 async def agent_node(state: AgentState) -> dict:
@@ -262,6 +464,30 @@ async def run_agent(
                 session["messages"].append(HumanMessage(content=content))
 
     session["messages"] = session["messages"][-20:] + [HumanMessage(content=message)]
+    deterministic = _deterministic_response(message, session, db)
+    if deterministic is not None:
+        session.update(
+            {
+                "messages": session["messages"]
+                + [AIMessage(content=deterministic["response"])],
+                "segment_preview": deterministic.get("segment_preview"),
+                "campaign_draft": deterministic.get("campaign_draft"),
+                "awaiting_approval": deterministic.get("awaiting_approval", False),
+                "pending_segment_id": deterministic.get("pending_segment_id"),
+                "final_response": deterministic["response"],
+                "session_id": session_id,
+            }
+        )
+        _sessions[session_id] = session
+        return {
+            "response": deterministic["response"],
+            "segment_preview": deterministic.get("segment_preview"),
+            "campaign_draft": deterministic.get("campaign_draft"),
+            "awaiting_approval": deterministic.get("awaiting_approval", False),
+            "pending_segment_id": deterministic.get("pending_segment_id"),
+            "session_id": session_id,
+        }
+
     result = await graph.ainvoke(session)
     _sessions[session_id] = result
     return {
