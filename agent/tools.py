@@ -67,6 +67,18 @@ def _parse_variants(raw: str) -> list[str]:
     return [str(item) for item in parsed[:3]]
 
 
+def _to_int(value: int | str | None) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _to_float(value: float | int | str | None) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
 def _schedule_channel_send(send_payloads: list[dict]) -> None:
     try:
         schedule_campaign_batches(send_payloads)
@@ -88,15 +100,15 @@ def _campaign_rates(campaign: Campaign) -> dict[str, float]:
 def get_tools(db: Session) -> list:
     @tool
     def query_customers_by_filters(
-        recency_days: int | None = None,
-        max_recency_days: int | None = None,
-        min_spend: float | None = None,
-        max_spend: float | None = None,
+        recency_days: int | str | None = None,
+        max_recency_days: int | str | None = None,
+        min_spend: float | str | None = None,
+        max_spend: float | str | None = None,
         gender: str | None = None,
         city: str | None = None,
         category: str | None = None,
-        min_orders: int | None = None,
-        max_orders: int | None = None,
+        min_orders: int | str | None = None,
+        max_orders: int | str | None = None,
     ) -> dict:
         """Find customers matching demographic and behavioural filters.
 
@@ -115,6 +127,13 @@ def get_tools(db: Session) -> list:
         finds women who bought ethnic wear but haven't returned in 45 days.
         Returns filter_rules dict — pass it directly to create_segment.
         """
+        recency_days = _to_int(recency_days)
+        max_recency_days = _to_int(max_recency_days)
+        min_spend = _to_float(min_spend)
+        max_spend = _to_float(max_spend)
+        min_orders = _to_int(min_orders)
+        max_orders = _to_int(max_orders)
+
         filter_rules = {
             key: value
             for key, value in {

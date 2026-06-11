@@ -21,6 +21,7 @@ Session memory:
 """
 
 import json
+import logging
 import operator
 import re
 from typing import Annotated, Optional, TypedDict
@@ -32,6 +33,9 @@ from langgraph.graph import END, StateGraph
 from agent.tools import get_tools
 from config import settings
 from database import SessionLocal
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentState(TypedDict):
@@ -117,7 +121,8 @@ async def agent_node(state: AgentState) -> dict:
         messages = state["messages"]
         try:
             response = await model_with_tools.ainvoke([SystemMessage(SYSTEM_PROMPT)] + messages)
-        except Exception:
+        except Exception as exc:
+            logger.exception("Groq agent call failed: %s", exc)
             response = AIMessage(
                 content=(
                     "I could not reach Groq right now. The CRM tools are available, "
