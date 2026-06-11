@@ -61,8 +61,29 @@ async def startup_event():
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "xeno-crm"}
+async def health(db: Session = Depends(get_db)):
+    """Full health check — verifies DB connection and channel service reachability."""
+    from models import Customer
+    from config import settings
+    import httpx
+
+    checks = {"api": "ok", "database": "unknown", "channel_service": "unknown"}
+
+    try:
+        count = db.query(Customer).count()
+        checks["database"] = f"ok ({count} customers)"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)}"
+
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{settings.CHANNEL_SERVICE_URL}/health")
+            checks["channel_service"] = "ok" if r.status_code == 200 else f"http {r.status_code}"
+    except Exception:
+        checks["channel_service"] = "unreachable"
+
+    overall = "ok" if all(v.startswith("ok") for v in checks.values()) else "degraded"
+    return {"status": overall, "service": "xeno-crm", "checks": checks}
 
 
 @app.get("/seed")

@@ -633,6 +633,43 @@ def _analytics_tab() -> None:
             unsafe_allow_html=True,
         )
 
+    st.divider()
+    st.subheader("Saved segments")
+    segs_r = _get_json("/segments", [])
+    segs = segs_r if isinstance(segs_r, list) else segs_r.get("data", [])
+
+    if segs:
+        cols = st.columns(3)
+        for index, segment in enumerate(segs[:9]):
+            with cols[index % 3]:
+                created_by = segment.get("created_by", "human")
+                badge_color = "#5B63FE" if created_by == "ai" else "#6B7280"
+                badge_label = "AI" if created_by == "ai" else "Manual"
+                st.markdown(
+                    f"""
+                <div style="border:1px solid rgba(0,0,0,0.08);border-radius:10px;
+                            padding:0.75rem 1rem;margin-bottom:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;
+                                align-items:flex-start;margin-bottom:6px;">
+                        <div style="font-weight:500;font-size:14px;
+                                    line-height:1.3;">{segment['name']}</div>
+                        <span style="background:{badge_color}22;color:{badge_color};
+                                     padding:2px 8px;border-radius:12px;
+                                     font-size:11px;font-weight:500;white-space:nowrap;
+                                     margin-left:8px;">{badge_label}</span>
+                    </div>
+                    <div style="font-size:12px;color:#888;margin-bottom:8px;
+                                line-height:1.4;">{segment.get('description', '')[:60]}</div>
+                    <div style="font-size:13px;font-weight:600;color:#5B63FE;">
+                        {segment.get('customer_count', 0):,} customers
+                    </div>
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+    else:
+        st.caption("No segments yet. Ask the agent to find an audience.")
+
     running_campaigns = [c for c in campaigns if c["status"] == "running"]
     if running_campaigns:
         campaign_label = "campaigns" if len(running_campaigns) > 1 else "campaign"
