@@ -1,3 +1,28 @@
+"""
+Receipt callback handler — POST /receipt
+
+The channel service fires this endpoint as each message progresses through
+its delivery lifecycle: queued → sent → delivered → opened → clicked (or failed).
+Callbacks may arrive out of order or be duplicated — both cases are handled.
+
+Design decisions:
+  Idempotency — STATUS_ORDER index comparison ensures we only advance state
+    forward, never backward. A duplicate 'delivered' callback after 'opened'
+    is silently ignored. This mirrors production receipt handling with providers
+    like Twilio (which can send duplicate webhooks on retry).
+
+  Aggregate counters — updated via SQL COUNT subqueries on every callback,
+    not Python-side counting. Safe under concurrent callbacks for the same
+    campaign. In production: use SELECT FOR UPDATE or a Redis counter.
+
+  Auto-complete — campaign.status changes to 'completed' automatically once
+    all messages reach a terminal state. No separate job or cron needed.
+
+  At scale: add idempotency keys to prevent double-processing, a dead-letter
+    queue for callbacks that fail to reach this endpoint, and a Redis stream
+    for real-time dashboard updates instead of polling.
+"""
+
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +35,11 @@ from schemas import ReceiptPayload
 
 
 router = APIRouter()
+
+# Defines valid lifecycle progression for a single message.
+# Index position enforces forward-only state transitions:
+#   index(new_event) must be > index(current_status), or event must be "failed".
+# This handles: duplicate callbacks, out-of-order delivery, provider retries.
 STATUS_ORDER = ["queued", "sent", "delivered", "opened", "clicked", "failed"]
 
 
@@ -65,6 +95,11 @@ async def receive_receipt(
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
+    # Update campaign aggregate counters using SQL COUNT subqueries.
+    # Reason: if we used Python-side counting (campaign.total_delivered += 1),
+    # concurrent callbacks for the same campaign could cause race conditions
+    # where two requests read the same value and both increment it, losing one.
+    # SQL COUNT runs atomically inside the database transaction.
     campaign.total_delivered = _count_messages(
         campaign.id,
         ("delivered", "opened", "clicked"),

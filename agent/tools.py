@@ -1,3 +1,19 @@
+"""
+LangGraph tool definitions for the Xeno campaign agent.
+
+Five tools, each decorated with @tool so LangGraph can bind them to the model.
+All tools receive a SQLAlchemy db Session via closure (get_tools factory) so
+they share the same database session as the HTTP request that spawned the agent.
+
+Tool call sequence for a typical campaign:
+  1. query_customers_by_filters  — find the audience
+  2. create_segment              — save the audience (returns segment_id)
+  3. draft_campaign_message      — LLM generates 3 message variants
+  4. [AWAITING_APPROVAL gate]    — human confirms in the UI
+  5. launch_campaign             — create + launch via channel service
+  6. get_campaign_analytics      — check performance (any time)
+"""
+
 import json
 import logging
 from datetime import datetime
@@ -82,7 +98,23 @@ def get_tools(db: Session) -> list:
         min_orders: int | None = None,
         max_orders: int | None = None,
     ) -> dict:
-        """Find customers matching filters. Always call this first when a marketer wants to target an audience. recency_days: customers inactive for more than N days. max_recency_days: customers active within N days. min_spend/max_spend: lifetime spend in rupees. gender: M or F. city: exact city name. category: ordered this category at least once."""
+        """Find customers matching demographic and behavioural filters.
+
+        Always call this FIRST when a marketer asks to target, find, or reach
+        any group of customers. Returns count + 5 sample customers so the marketer
+        can verify the audience looks right before saving it as a segment.
+
+        Filter key guide:
+          recency_days=60      → customers inactive for 60+ days (lapsed)
+          max_recency_days=30  → customers who bought within 30 days (recent)
+          gender="F"           → female customers only
+          category="Ethnic Wear" → has ordered this category at least once
+          min_spend=5000       → lifetime spend above ₹5,000
+
+        Combine filters freely: recency_days=45 + gender="F" + category="Ethnic Wear"
+        finds women who bought ethnic wear but haven't returned in 45 days.
+        Returns filter_rules dict — pass it directly to create_segment.
+        """
         filter_rules = {
             key: value
             for key, value in {
@@ -131,7 +163,15 @@ def get_tools(db: Session) -> list:
 
     @tool
     def create_segment(name: str, description: str, filter_rules: dict) -> dict:
-        """Save the matched audience as a named segment in the database. Call this after query_customers_by_filters has confirmed the audience looks correct. Returns the segment_id which you must remember for the launch step."""
+        """Save the matched audience as a named segment in the database.
+
+        Call this AFTER query_customers_by_filters has confirmed the audience
+        is correct. Sets created_by='ai' to distinguish AI-generated segments
+        from manually built ones (visible in the Analytics dashboard).
+
+        IMPORTANT: The returned segment_id must be passed to launch_campaign.
+        Do not lose it between turns — it is stored in pending_segment_id in state.
+        """
         customer_ids = execute_segment_filter(filter_rules, db)
         segment = Segment(
             name=name,
@@ -155,7 +195,16 @@ def get_tools(db: Session) -> list:
         offer: str,
         tone: str = "friendly",
     ) -> dict:
-        """Generate 3 personalized message variants using AI. segment_description: plain English description of who the audience is. offer: what you are promoting, e.g. '20% off ethnic wear'. tone: friendly, urgent, or exclusive."""
+        """Generate 3 personalized message variants using GPT-4o-mini.
+
+        Calls the LLM with a StyleHub-specific system prompt and returns
+        exactly 3 WhatsApp/SMS message variants under 160 characters each.
+        Always includes {name} as a personalization token — the campaign
+        launcher replaces this with each customer's actual name at send time.
+
+        tone options: "friendly" (default), "urgent", "exclusive"
+        Returns {"variants": [...], "recommended": variants[0]}
+        """
         if not settings.GROQ_API_KEY:
             variants = [
                 f"Hey {{name}}, {offer} is live at StyleHub. Pick your favorites today.",
@@ -198,7 +247,17 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
         campaign_name: str,
         channel: str = "whatsapp",
     ) -> dict:
-        """Launch a campaign to a saved segment. ONLY call this after the marketer has explicitly approved. segment_id must be the id returned by create_segment. channel options: whatsapp, sms, email."""
+        """Launch a campaign to a saved segment via the channel service.
+
+        Creates a Campaign row, personalizes the message for each customer
+        (substituting {name}, {city}, {last_category}), creates a Message row
+        per recipient, then batch-POSTs to the channel service /send-batch
+        endpoint in chunks of 50.
+
+        ONLY call this after the marketer has explicitly approved. The system
+        prompt forbids calling this without AWAITING_APPROVAL confirmation.
+        segment_id must be the exact UUID returned by create_segment.
+        """
         segment = db.get(Segment, segment_id)
         if segment is None:
             return {"error": "Segment not found", "segment_id": segment_id}
@@ -224,7 +283,15 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
 
     @tool
     def get_campaign_analytics(campaign_id: str | None = None) -> dict:
-        """Get campaign performance stats. If campaign_id given: detailed stats for that campaign. If campaign_id is None: overview of the last 5 campaigns."""
+        """Fetch campaign performance statistics from the database.
+
+        If campaign_id given: returns detailed stats for that specific campaign
+        including delivery_rate, open_rate, click_rate as floats (0.0-1.0).
+        If campaign_id is None: returns overview of the last 5 campaigns.
+
+        Call this when the marketer asks about performance, results, stats,
+        how a campaign did, open rates, click rates, or anything analytical.
+        """
         if campaign_id:
             campaign = db.get(Campaign, campaign_id)
             if campaign is None:

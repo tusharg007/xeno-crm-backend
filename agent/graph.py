@@ -1,3 +1,25 @@
+"""
+LangGraph campaign agent for Xeno Mini CRM.
+
+Architecture:
+  StateGraph with two nodes — agent (ReAct reasoning loop) and tools
+  (executes tool calls). The graph cycles agent → tools → agent until
+  the model produces a response with no tool calls, then exits to END.
+
+HITL approval pattern:
+  Rather than a separate approval node or complex branching, the agent
+  embeds a signal token "AWAITING_APPROVAL:[segment_id]" in its text
+  response when it wants human confirmation before launching. The agent_node
+  parses this signal, sets awaiting_approval=True in state, and stores the
+  segment_id as pending_segment_id. The frontend surfaces an approval card.
+  launch_campaign is never called until the marketer explicitly confirms.
+
+Session memory:
+  _sessions dict (module-level) maps session_id → AgentState, persisting
+  context between HTTP requests. In production this would be Redis or
+  DynamoDB; for this scope an in-memory dict is sufficient.
+"""
+
 import json
 import operator
 import re
@@ -63,6 +85,11 @@ Be specific — say "I found 187 customers" not "I found some customers".
 Format all responses in clean markdown. Be concise."""
 
 
+# In-memory session store: maps session_id (str) -> persisted AgentState dict.
+# Persists context (pending_segment_id, awaiting_approval, message history)
+# between sequential HTTP requests from the same frontend session.
+# Module-level so it survives across requests within the same process.
+# At production scale: replace with Redis HSET with TTL.
 _sessions: dict[str, dict] = {}
 
 
@@ -103,6 +130,10 @@ async def agent_node(state: AgentState) -> dict:
     new_state: dict = {"messages": [response]}
     content = response.content if isinstance(response.content, str) else ""
 
+    # Signal parsing: the agent embeds AWAITING_APPROVAL:[uuid] in its response
+    # to trigger the human-in-the-loop gate. We parse it here, strip it from
+    # the visible response, and store the segment_id for the launch step.
+    # This avoids a separate graph node and keeps the state machine simple.
     if "AWAITING_APPROVAL:" in content:
         match = re.search(r"AWAITING_APPROVAL:([a-f0-9-]+)", content)
         if match:
