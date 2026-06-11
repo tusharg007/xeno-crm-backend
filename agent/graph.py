@@ -28,10 +28,10 @@ from datetime import datetime
 from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
 from sqlalchemy import func, select
 
+from agent.groq_utils import GROQ_UNAVAILABLE_MESSAGE, build_groq_model, retry_async_groq_call
 from agent.tools import CATEGORY_ALIASES, get_tools
 from config import settings
 from database import SessionLocal
@@ -296,7 +296,9 @@ def _deterministic_response(message: str, session: dict, db) -> dict | None:
     gender = _normalize_gender(f" {lowered} ")
     category = _normalize_category_from_text(lowered)
 
-    if "what" in lowered and ("buying" in lowered or "categories" in lowered):
+    if ("what" in lowered or "which" in lowered) and (
+        "buying" in lowered or "buy from" in lowered or "categories" in lowered
+    ):
         return _category_insights_response(gender, db)
 
     filter_rules = {}
@@ -332,24 +334,18 @@ async def agent_node(state: AgentState) -> dict:
 
     db = SessionLocal()
     try:
-        model = ChatGroq(
-            model=settings.LLM_MODEL,
-            temperature=0.3,
-            groq_api_key=settings.GROQ_API_KEY,
-        )
+        model = build_groq_model(temperature=0.3)
         tools = get_tools(db)
         model_with_tools = model.bind_tools(tools)
         messages = state["messages"]
         try:
-            response = await model_with_tools.ainvoke([SystemMessage(SYSTEM_PROMPT)] + messages)
+            response = await retry_async_groq_call(
+                lambda: model_with_tools.ainvoke([SystemMessage(SYSTEM_PROMPT)] + messages),
+                label="Groq agent call",
+            )
         except Exception as exc:
             logger.exception("Groq agent call failed: %s", exc)
-            response = AIMessage(
-                content=(
-                    "I could not reach Groq right now. The CRM tools are available, "
-                    "but the AI campaign manager needs network access to respond."
-                )
-            )
+            response = AIMessage(content=GROQ_UNAVAILABLE_MESSAGE)
     finally:
         db.close()
 

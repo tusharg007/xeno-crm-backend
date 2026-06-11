@@ -20,10 +20,10 @@ from datetime import datetime
 from typing import Any
 
 from langchain_core.tools import tool
-from langchain_groq import ChatGroq
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from agent.groq_utils import build_groq_model, retry_sync_groq_call
 from config import settings
 from models import Campaign, Customer, Order, Segment
 from routers.campaigns import launch_campaign_record, schedule_campaign_batches
@@ -340,11 +340,7 @@ def get_tools(db: Session) -> list:
             ]
             return {"variants": variants, "recommended": variants[0]}
 
-        llm = ChatGroq(
-            model=settings.LLM_MODEL,
-            temperature=0.7,
-            groq_api_key=settings.GROQ_API_KEY,
-        )
+        llm = build_groq_model(temperature=0.7)
         system = f"""You are a CRM copywriter for StyleHub, an Indian fashion retail brand.
 Write punchy messages for WhatsApp and SMS under 160 characters each.
 Always include {{name}} as a personalization token.
@@ -354,8 +350,11 @@ Offer: {offer}
 Return ONLY a valid JSON array of exactly 3 message strings. No explanation, no markdown.
 Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
         try:
-            response = llm.invoke(
-                [{"role": "system", "content": system}, {"role": "user", "content": user}]
+            response = retry_sync_groq_call(
+                lambda: llm.invoke(
+                    [{"role": "system", "content": system}, {"role": "user", "content": user}]
+                ),
+                label="Groq campaign copy generation",
             )
             variants = _parse_variants(str(response.content))
         except Exception as exc:
