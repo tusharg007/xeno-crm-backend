@@ -21,16 +21,31 @@ from typing import Any
 
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from config import settings
-from models import Campaign, Customer, Segment
+from models import Campaign, Customer, Order, Segment
 from routers.campaigns import launch_campaign_record, schedule_campaign_batches
 from routers.segments import execute_segment_filter
 
 
 logger = logging.getLogger(__name__)
+
+CATEGORY_ALIASES = {
+    "ethnic": "Ethnic Wear",
+    "ethnic wear": "Ethnic Wear",
+    "footwear": "Footwear",
+    "shoes": "Footwear",
+    "shoe": "Footwear",
+    "sandals": "Footwear",
+    "skincare": "Skincare",
+    "skin care": "Skincare",
+    "accessories": "Accessories",
+    "accessory": "Accessories",
+    "activewear": "Activewear",
+    "active wear": "Activewear",
+}
 
 
 def _filter_summary(filter_rules: dict[str, Any]) -> str:
@@ -77,6 +92,24 @@ def _to_float(value: float | int | str | None) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _normalize_category(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = CATEGORY_ALIASES.get(value.strip().lower())
+    return normalized or value
+
+
+def _normalize_gender(value: str | None) -> str | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered in {"m", "male", "men", "man"}:
+        return "M"
+    if lowered in {"f", "female", "women", "woman"}:
+        return "F"
+    return value
 
 
 def _schedule_channel_send(send_payloads: list[dict]) -> None:
@@ -133,6 +166,8 @@ def get_tools(db: Session) -> list:
         max_spend = _to_float(max_spend)
         min_orders = _to_int(min_orders)
         max_orders = _to_int(max_orders)
+        gender = _normalize_gender(gender)
+        category = _normalize_category(category)
 
         filter_rules = {
             key: value
@@ -178,6 +213,79 @@ def get_tools(db: Session) -> list:
             "sample": sample,
             "filter_rules": filter_rules,
             "filter_summary": _filter_summary(filter_rules),
+        }
+
+    @tool
+    def get_category_insights(
+        gender: str | None = None,
+        category: str | None = None,
+    ) -> dict:
+        """Return SQL-backed category buying insights.
+
+        Use this for questions like "what categories are men buying?" or
+        "what are women buying?" Never answer those analytical questions from
+        general knowledge: use this tool and report only the returned
+        categories/counts. For "find customers who bought [category]" questions,
+        use query_customers_by_filters instead because that is an audience query.
+        """
+        gender = _normalize_gender(gender)
+        category = _normalize_category(category)
+
+        query = (
+            db.query(
+                Order.category.label("category"),
+                func.count(Order.id).label("order_count"),
+                func.count(func.distinct(Customer.id)).label("customer_count"),
+                func.round(func.sum(Order.amount), 2).label("total_spend"),
+            )
+            .join(Customer, Customer.id == Order.customer_id)
+        )
+        if gender:
+            query = query.filter(Customer.gender == gender)
+        if category:
+            query = query.filter(Order.category == category)
+
+        rows = (
+            query.group_by(Order.category)
+            .order_by(func.count(Order.id).desc())
+            .all()
+        )
+
+        categories = [
+            {
+                "category": row.category,
+                "order_count": int(row.order_count or 0),
+                "customer_count": int(row.customer_count or 0),
+                "total_spend": float(row.total_spend or 0),
+            }
+            for row in rows
+        ]
+
+        if category:
+            customer_ids = execute_segment_filter(
+                {
+                    key: value
+                    for key, value in {"gender": gender, "category": category}.items()
+                    if value is not None
+                },
+                db,
+            )
+        else:
+            customer_ids = []
+
+        scope = "all customers"
+        if gender == "M":
+            scope = "male customers"
+        elif gender == "F":
+            scope = "female customers"
+
+        return {
+            "scope": scope,
+            "gender": gender,
+            "category_filter": category,
+            "categories": categories,
+            "matching_customer_count": len(customer_ids) if category else None,
+            "allowed_categories": sorted(set(CATEGORY_ALIASES.values())),
         }
 
     @tool
@@ -354,6 +462,7 @@ Example: ["Hey {{name}}, ...", "Hi {{name}}, ...", "{{name}}, ..."]"""
 
     return [
         query_customers_by_filters,
+        get_category_insights,
         create_segment,
         draft_campaign_message,
         launch_campaign,
