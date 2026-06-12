@@ -28,8 +28,8 @@ st.markdown(
     visibility: hidden;
 }
 .block-container {
-    max-width: 1320px;
-    padding-top: 3.5rem !important;
+    max-width: 1280px;
+    padding-top: 2.25rem !important;
     padding-bottom: 3rem !important;
     color: #111827;
 }
@@ -37,7 +37,7 @@ st.markdown(
     background: #FFFFFF;
     border-right: 1px solid rgba(17,24,39,0.14);
 }
-[data-testid="stSidebar"] .block-container { padding-top: 3rem; }
+[data-testid="stSidebar"] .block-container { padding-top: 2.25rem; }
 [data-testid="stMetric"] {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
@@ -63,20 +63,27 @@ st.markdown(
 }
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #FFFFFF !important;
-    border: 1px solid rgba(37,99,235,0.24) !important;
+    border: 1px solid rgba(37,99,235,0.18) !important;
     border-radius: 12px !important;
-    box-shadow: 0 12px 28px rgba(37,99,235,0.10) !important;
+    box-shadow: 0 8px 20px rgba(37,99,235,0.07) !important;
 }
 [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] p,
 [data-testid="stVerticalBlockBorderWrapper"] label,
 [data-testid="stVerticalBlockBorderWrapper"] span {
     color: #111827;
 }
-div[data-testid="stTabs"] { margin-top: 0.25rem; }
-div[data-testid="stTabs"] button { min-height: 2.5rem; }
+div[data-testid="stTabs"] { margin-top: 0.5rem; }
+div[data-testid="stTabs"] button {
+    min-height: 2.35rem;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+}
 div[data-testid="stTabs"] button p {
     font-size: 14px !important;
     font-weight: 600 !important;
+}
+div[data-testid="stTabs"] [role="tabpanel"] {
+    padding-top: 1rem;
 }
 h1, h2, h3 {
     color: #111827 !important;
@@ -115,10 +122,10 @@ h2, h3 {
 }
 .xeno-page-title {
     color: #111827;
-    font-size: 24px;
+    font-size: 23px;
     font-weight: 700;
     line-height: 1.25;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
 }
 .xeno-page-subtitle {
     color: #1F2937;
@@ -130,8 +137,8 @@ h2, h3 {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
-    padding: 18px;
-    margin: 14px 0 18px;
+    padding: 16px;
+    margin: 10px 0 16px;
     box-shadow: 0 10px 24px rgba(37,99,235,0.07);
 }
 .xeno-section-header {
@@ -344,9 +351,9 @@ h2, h3 {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
-    padding: 16px;
-    min-height: 166px;
-    margin-bottom: 10px;
+    padding: 14px;
+    min-height: 150px;
+    margin-bottom: 8px;
 }
 .xeno-journey-icon {
     width: 34px;
@@ -365,13 +372,49 @@ h2, h3 {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
-    padding: 14px 16px;
+    padding: 14px;
     margin-bottom: 10px;
+}
+.xeno-journey-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 6px 0 14px;
+}
+.xeno-journey-summary-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(37,99,235,0.18);
+    border-radius: 8px;
+    padding: 13px 14px;
+}
+.xeno-journey-summary-label {
+    color: #111827;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+.xeno-journey-summary-value {
+    color: #2563EB;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1;
+}
+.xeno-template-state {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #166534;
+    background: rgba(34,197,94,0.12);
+    margin-bottom: 8px;
 }
 @media (max-width: 900px) {
     .xeno-kpi-grid,
     .xeno-rfm-grid,
-    .xeno-attribute-grid {
+    .xeno-attribute-grid,
+    .xeno-journey-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .xeno-page-title { font-size: 21px; }
@@ -384,7 +427,8 @@ h2, h3 {
     .block-container { padding-top: 2.75rem !important; }
     .xeno-kpi-grid,
     .xeno-rfm-grid,
-    .xeno-attribute-grid {
+    .xeno-attribute-grid,
+    .xeno-journey-summary {
         grid-template-columns: 1fr;
     }
 }
@@ -402,6 +446,7 @@ def _init_session_state() -> None:
         "campaign_draft": None,
         "awaiting_approval": False,
         "pending_segment_id": None,
+        "journey_notice": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1877,57 +1922,43 @@ def _journeys_tab() -> None:
         st.error(f"Cannot load journeys yet: {exc}")
         templates, active_journeys = [], []
 
-    _section_header("Available journey types", "Choose a lifecycle program to activate.")
-    cols = st.columns(3)
-    for index, template in enumerate(templates):
-        with cols[index % 3]:
-            st.markdown(
-                f"""
-            <div class="xeno-journey-card">
-                <div class="xeno-journey-icon">{escape(str(template['icon']))}</div>
-                <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:5px;">
-                    {escape(str(template['name']))}</div>
-                <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;margin-bottom:12px;">
-                    {escape(str(template['description']))}</div>
-                <div style="font-size:12px;background:#EAF1FF;padding:8px 10px;
-                            border-radius:8px;color:#111827;font-weight:500;line-height:1.35;">
-                    {escape(str(template['default_message'])[:78])}...
-                </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-            if st.button(
-                "Activate",
-                key=f"activate_{template['type']}",
-                use_container_width=True,
-                type="primary",
-            ):
-                try:
-                    response = _post_json(
-                        "/journeys/",
-                        {
-                            "name": template["name"],
-                            "journey_type": template["type"],
-                            "trigger_rules": template["trigger_rules"],
-                            "message_template": template["default_message"],
-                            "channel": "whatsapp",
-                        },
-                    )
-                    if response.ok:
-                        st.success(f"Journey '{template['name']}' activated.")
-                        st.rerun()
-                    else:
-                        st.error("Activation failed.")
-                except Exception as exc:
-                    st.error(f"Failed: {exc}")
+    notice = st.session_state.pop("journey_notice", None)
+    if notice:
+        st.success(notice)
 
-    st.divider()
-    _section_header("Active journeys", "Live lifecycle automations and their latest stats.")
+    active_count = sum(1 for journey in active_journeys if journey.get("status") == "active")
+    paused_count = sum(1 for journey in active_journeys if journey.get("status") == "paused")
+    total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in active_journeys)
+    st.markdown(
+        f"""
+        <div class="xeno-journey-summary">
+            <div class="xeno-journey-summary-card">
+                <div class="xeno-journey-summary-label">Active journeys</div>
+                <div class="xeno-journey-summary-value">{active_count}</div>
+            </div>
+            <div class="xeno-journey-summary-card">
+                <div class="xeno-journey-summary-label">Paused journeys</div>
+                <div class="xeno-journey-summary-value">{paused_count}</div>
+            </div>
+            <div class="xeno-journey-summary-card">
+                <div class="xeno-journey-summary-label">Campaigns triggered</div>
+                <div class="xeno-journey-summary-value">{total_triggered}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _section_header(
+        "Active journey control center",
+        "Run, pause, or resume lifecycle automations without losing the template list.",
+    )
 
     if active_journeys:
         for journey in active_journeys:
-            status_color = "#22c55e" if journey["status"] == "active" else "#374151"
+            status = journey.get("status", "active")
+            status_color = "#22c55e" if status == "active" else "#374151"
+            status_label = status.title()
             st.markdown(
                 f"""
             <div class="xeno-active-journey">
@@ -1941,6 +1972,9 @@ def _journeys_tab() -> None:
                             <span class="xeno-channel-pill">
                                 <span class="xeno-channel-icon">W</span>{escape(str(journey['channel']).title())}
                             </span>
+                            <span style="border-radius:999px;padding:3px 9px;font-size:11px;
+                                         font-weight:700;color:{status_color};
+                                         background:{status_color}22;">{status_label}</span>
                         </div>
                         <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;">
                             {escape(str(journey['message_template'])[:100])}...
@@ -1955,12 +1989,13 @@ def _journeys_tab() -> None:
             """,
                 unsafe_allow_html=True,
             )
-            _, col_action = st.columns([7, 3])
-            with col_action:
+            col_run, col_toggle, col_hint = st.columns([1.2, 1.2, 4.6])
+            with col_run:
                 if st.button(
                     "Run now",
                     key=f"trigger_{journey['id']}",
                     use_container_width=True,
+                    disabled=status != "active",
                 ):
                     try:
                         response = _post_json(
@@ -1969,12 +2004,25 @@ def _journeys_tab() -> None:
                         )
                         if response.ok:
                             data = response.json()
-                            st.success(f"Triggered to {data.get('queued', 0)} customers.")
+                            queued = data.get("queued", 0)
+                            matched = data.get("matched", 0)
+                            reason = data.get("reason")
+                            if queued:
+                                st.session_state.journey_notice = (
+                                    f"Journey '{journey['name']}' created a campaign "
+                                    f"for {queued} eligible customers."
+                                )
+                            else:
+                                st.session_state.journey_notice = (
+                                    f"Journey '{journey['name']}' matched {matched} customers "
+                                    f"but queued 0. Reason: {reason or 'no eligible customers'}."
+                                )
                             st.rerun()
                         else:
                             st.error("Trigger failed.")
                     except Exception as exc:
                         st.error(str(exc))
+            with col_toggle:
                 action_label = "Pause" if journey["status"] == "active" else "Resume"
                 if st.button(
                     action_label,
@@ -1984,12 +2032,84 @@ def _journeys_tab() -> None:
                     try:
                         response = _post_json(f"/journeys/{journey['id']}/pause")
                         if response.ok:
+                            next_state = "paused" if action_label == "Pause" else "active"
+                            st.session_state.journey_notice = (
+                                f"Journey '{journey['name']}' is now {next_state}."
+                            )
                             st.rerun()
                     except Exception as exc:
                         st.error(str(exc))
+            with col_hint:
+                if status != "active":
+                    st.caption("Resume this journey before running it.")
+                else:
+                    st.caption("Run now creates a campaign from current eligible customers.")
             st.divider()
     else:
-        st.info("No journeys yet. Activate one from the templates above.")
+        st.info("No journeys yet. Activate one from the templates below.")
+
+    st.divider()
+    _section_header("Journey templates", "Templates always stay visible. Activate one or add another copy.")
+    active_by_type: dict[str, int] = {}
+    for journey in active_journeys:
+        journey_type = str(journey.get("journey_type", ""))
+        active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
+
+    cols = st.columns(3)
+    for index, template in enumerate(templates):
+        template_type = str(template["type"])
+        existing_count = active_by_type.get(template_type, 0)
+        with cols[index % 3]:
+            state_badge = (
+                f'<div class="xeno-template-state">{existing_count} configured</div>'
+                if existing_count
+                else ""
+            )
+            st.markdown(
+                f"""
+            <div class="xeno-journey-card">
+                {state_badge}
+                <div class="xeno-journey-icon">{escape(str(template['icon'])[:1])}</div>
+                <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:5px;">
+                    {escape(str(template['name']))}</div>
+                <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;margin-bottom:12px;">
+                    {escape(str(template['description']))}</div>
+                <div style="font-size:12px;background:#EAF1FF;padding:8px 10px;
+                            border-radius:8px;color:#111827;font-weight:500;line-height:1.35;">
+                    {escape(str(template['default_message'])[:78])}...
+                </div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            button_label = "Activate another" if existing_count else "Activate"
+            if st.button(
+                button_label,
+                key=f"activate_{template_type}",
+                use_container_width=True,
+                type="primary" if not existing_count else "secondary",
+            ):
+                try:
+                    response = _post_json(
+                        "/journeys/",
+                        {
+                            "name": template["name"],
+                            "journey_type": template["type"],
+                            "trigger_rules": template["trigger_rules"],
+                            "message_template": template["default_message"],
+                            "channel": "whatsapp",
+                        },
+                    )
+                    if response.ok:
+                        st.session_state.journey_notice = (
+                            f"Journey '{template['name']}' activated. "
+                            "It is now listed in the control center above."
+                        )
+                        st.rerun()
+                    else:
+                        st.error("Activation failed.")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
 
 
 _init_session_state()
