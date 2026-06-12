@@ -22,7 +22,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-[data-testid="stAppViewContainer"] { background: #F0F4FF; }
+[data-testid="stAppViewContainer"] { background: #EEF4FF; color: #111827; }
 [data-testid="stHeader"] { background: transparent; }
 [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer {
     visibility: hidden;
@@ -31,22 +31,24 @@ st.markdown(
     max-width: 1320px;
     padding-top: 3.5rem !important;
     padding-bottom: 3rem !important;
-    color: #1A1A2E;
+    color: #111827;
 }
 [data-testid="stSidebar"] {
     background: #FFFFFF;
-    border-right: 1px solid rgba(0,0,0,0.08);
+    border-right: 1px solid rgba(17,24,39,0.14);
 }
 [data-testid="stSidebar"] .block-container { padding-top: 3rem; }
 [data-testid="stMetric"] {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 1rem;
+    box-shadow: 0 6px 18px rgba(37,99,235,0.06);
 }
 [data-testid="stMetricLabel"] p {
-    color: #6B7280 !important;
+    color: #111827 !important;
     font-size: 12px !important;
+    font-weight: 700 !important;
 }
 [data-testid="stMetricValue"] {
     color: #2563EB !important;
@@ -55,9 +57,20 @@ st.markdown(
 }
 [data-testid="stDataFrame"] {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(17,24,39,0.14);
     border-radius: 8px;
     overflow: hidden;
+}
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(37,99,235,0.24) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 12px 28px rgba(37,99,235,0.10) !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stVerticalBlockBorderWrapper"] label,
+[data-testid="stVerticalBlockBorderWrapper"] span {
+    color: #111827;
 }
 div[data-testid="stTabs"] { margin-top: 0.25rem; }
 div[data-testid="stTabs"] button { min-height: 2.5rem; }
@@ -66,7 +79,7 @@ div[data-testid="stTabs"] button p {
     font-weight: 600 !important;
 }
 h1, h2, h3 {
-    color: #1A1A2E !important;
+    color: #111827 !important;
     line-height: 1.3 !important;
     padding-top: 0.35rem !important;
     padding-bottom: 0.2rem !important;
@@ -87,10 +100,10 @@ h2, h3 {
 }
 .xeno-card {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(17,24,39,0.14);
     border-radius: 8px;
     padding: 16px;
-    box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+    box-shadow: 0 8px 24px rgba(37,99,235,0.07);
 }
 .xeno-page-kicker {
     color: #2563EB;
@@ -101,23 +114,25 @@ h2, h3 {
     margin-bottom: 4px;
 }
 .xeno-page-title {
-    color: #1A1A2E;
+    color: #111827;
     font-size: 24px;
     font-weight: 700;
     line-height: 1.25;
     margin-bottom: 4px;
 }
 .xeno-page-subtitle {
-    color: #6B7280;
+    color: #1F2937;
     font-size: 13px;
+    font-weight: 500;
     margin-bottom: 18px;
 }
 .xeno-section {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 18px;
     margin: 14px 0 18px;
+    box-shadow: 0 10px 24px rgba(37,99,235,0.07);
 }
 .xeno-section-header {
     display: flex;
@@ -127,14 +142,15 @@ h2, h3 {
     margin-bottom: 14px;
 }
 .xeno-section-title {
-    color: #1A1A2E;
+    color: #111827;
     font-size: 16px;
     font-weight: 600;
     line-height: 1.35;
 }
 .xeno-section-caption {
-    color: #6B7280;
+    color: #374151;
     font-size: 12px;
+    font-weight: 500;
     margin-top: 3px;
 }
 .xeno-kpi-grid {
@@ -145,13 +161,15 @@ h2, h3 {
 }
 .xeno-kpi {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 15px 16px;
+    box-shadow: 0 6px 18px rgba(37,99,235,0.06);
 }
 .xeno-kpi-label {
-    color: #6B7280;
+    color: #111827;
     font-size: 12px;
+    font-weight: 700;
     margin-bottom: 6px;
 }
 .xeno-kpi-value {
@@ -161,8 +179,9 @@ h2, h3 {
     line-height: 1;
 }
 .xeno-kpi-note {
-    color: #6B7280;
+    color: #374151;
     font-size: 11px;
+    font-weight: 500;
     margin-top: 7px;
 }
 .xeno-table {
@@ -170,7 +189,7 @@ h2, h3 {
     border-collapse: separate;
     border-spacing: 0;
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(17,24,39,0.14);
     border-radius: 8px;
     overflow: hidden;
     font-size: 13px;
@@ -180,18 +199,18 @@ h2, h3 {
     border-radius: 8px;
 }
 .xeno-table th {
-    color: #374151;
+    color: #111827;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 700;
     text-transform: uppercase;
     text-align: left;
-    background: #F8FAFC;
-    border-bottom: 1px solid rgba(0,0,0,0.08);
+    background: #EAF1FF;
+    border-bottom: 1px solid rgba(17,24,39,0.14);
     padding: 12px;
 }
 .xeno-table td {
-    color: #1A1A2E;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
+    color: #111827;
+    border-bottom: 1px solid rgba(17,24,39,0.10);
     padding: 12px;
     vertical-align: middle;
     white-space: nowrap;
@@ -202,8 +221,8 @@ h2, h3 {
     align-items: center;
     gap: 4px;
     color: #2563EB;
-    background: rgba(37,99,235,0.08);
-    border: 1px solid rgba(37,99,235,0.14);
+    background: rgba(37,99,235,0.12);
+    border: 1px solid rgba(37,99,235,0.24);
     border-radius: 999px;
     padding: 3px 8px;
     margin-right: 4px;
@@ -223,8 +242,8 @@ h2, h3 {
     font-weight: 700;
 }
 .xeno-channel-icon-muted {
-    background: #E5E7EB;
-    color: #6B7280;
+    background: #D1D5DB;
+    color: #111827;
 }
 .xeno-status {
     display: inline-flex;
@@ -243,8 +262,8 @@ h2, h3 {
     background: rgba(37,99,235,0.12);
 }
 .xeno-status-draft {
-    color: #374151;
-    background: #F3F4F6;
+    color: #111827;
+    background: #E5E7EB;
 }
 .xeno-revenue-positive { color: #2563EB; font-weight: 700; }
 .xeno-revenue-empty { color: #9CA3AF; }
@@ -252,14 +271,15 @@ h2, h3 {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
-    background: #F3F4F6;
+    background: #EAF1FF;
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 16px;
 }
 .xeno-rfm-label {
-    color: #6B7280;
+    color: #111827;
     font-size: 12px;
+    font-weight: 700;
     margin-bottom: 4px;
 }
 .xeno-rfm-value {
@@ -274,17 +294,18 @@ h2, h3 {
 }
 .xeno-attribute {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(17,24,39,0.14);
     border-radius: 8px;
     padding: 12px;
 }
 .xeno-attribute-label {
-    color: #6B7280;
+    color: #111827;
     font-size: 12px;
+    font-weight: 700;
     margin-bottom: 5px;
 }
 .xeno-attribute-value {
-    color: #1A1A2E;
+    color: #111827;
     font-size: 14px;
     font-weight: 600;
 }
@@ -294,23 +315,23 @@ h2, h3 {
     gap: 12px;
     align-items: center;
     padding: 12px 0;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
+    border-bottom: 1px solid rgba(17,24,39,0.10);
 }
 .xeno-hit-row:last-child { border-bottom: 0; }
 .xeno-hit-head {
-    color: #374151;
+    color: #111827;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 700;
     text-transform: uppercase;
 }
 .xeno-hit-category {
-    color: #1A1A2E;
+    color: #111827;
     font-size: 13px;
     font-weight: 600;
 }
 .xeno-hit-track {
     height: 8px;
-    background: #E5E7EB;
+    background: #D1D5DB;
     border-radius: 999px;
     overflow: hidden;
 }
@@ -321,7 +342,7 @@ h2, h3 {
 }
 .xeno-journey-card {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 16px;
     min-height: 166px;
@@ -342,7 +363,7 @@ h2, h3 {
 }
 .xeno-active-journey {
     background: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 14px 16px;
     margin-bottom: 10px;
@@ -608,7 +629,7 @@ def _product_hit_rate_panel(top_category: str) -> None:
                     </div>
                 </div>
                 <div style="text-align:right;">
-                    <div style="color:#6B7280;font-size:12px;">Top category</div>
+                    <div style="color:#111827;font-size:12px;font-weight:700;">Top category</div>
                     <div style="color:#2563EB;font-size:16px;font-weight:700;">
                         {escape(top_category)}
                     </div>
@@ -662,7 +683,7 @@ def _render_suggestions() -> None:
     <div style="text-align:center;padding:2rem 1rem 1.5rem;">
         <div style="font-size:32px;margin-bottom:8px;">&#128153;</div>
         <div style="font-size:18px;font-weight:600;margin-bottom:6px;">Hi, I'm Xeno</div>
-        <div style="font-size:14px;color:#888;margin-bottom:1.5rem;max-width:320px;margin-left:auto;margin-right:auto;">
+        <div style="font-size:14px;color:#374151;font-weight:500;margin-bottom:1.5rem;max-width:320px;margin-left:auto;margin-right:auto;">
             Your AI campaign manager for StyleHub.
             Describe who you want to reach; I'll handle the rest.
         </div>
@@ -1306,10 +1327,10 @@ def _analytics_tab() -> None:
                         st.markdown(
                             f"""
                         <div style="display:flex;justify-content:space-between;
-                                    padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06);">
+                                    padding:8px 0;border-bottom:1px solid rgba(17,24,39,0.12);">
                             <div>
-                                <div style="font-weight:500;">{performer.get('name', '')}</div>
-                                <div style="font-size:12px;color:#888;">{performer.get('city', '')}</div>
+                                <div style="font-weight:700;color:#111827;">{performer.get('name', '')}</div>
+                                <div style="font-size:12px;color:#374151;font-weight:500;">{performer.get('city', '')}</div>
                             </div>
                             <span style="height:24px;background:{badge_color}22;color:{badge_color};
                                          padding:3px 9px;border-radius:12px;font-size:12px;">
@@ -1347,7 +1368,7 @@ def _analytics_tab() -> None:
     else:
         st.markdown(
             """
-        <div style="text-align:center;padding:3rem;color:#888;">
+        <div style="text-align:center;padding:3rem;color:#374151;font-weight:600;">
             <div style="font-size:24px;margin-bottom:8px;">&#128202;</div>
             No campaigns yet. Use the AI Agent tab to create and launch one.
         </div>
@@ -1365,24 +1386,24 @@ def _analytics_tab() -> None:
         for index, segment in enumerate(segs[:9]):
             with cols[index % 3]:
                 created_by = segment.get("created_by", "human")
-                badge_color = "#5B63FE" if created_by == "ai" else "#6B7280"
+                badge_color = "#5B63FE" if created_by == "ai" else "#374151"
                 badge_label = "AI" if created_by == "ai" else "Manual"
                 st.markdown(
                     f"""
-                <div style="border:1px solid rgba(0,0,0,0.08);border-radius:10px;
+                <div style="border:1px solid rgba(37,99,235,0.18);border-radius:10px;
                             padding:0.75rem 1rem;margin-bottom:0.75rem;">
                     <div style="display:flex;justify-content:space-between;
                                 align-items:flex-start;margin-bottom:6px;">
-                        <div style="font-weight:500;font-size:14px;
+                        <div style="font-weight:700;color:#111827;font-size:14px;
                                     line-height:1.3;">{segment['name']}</div>
                         <span style="background:{badge_color}22;color:{badge_color};
                                      padding:2px 8px;border-radius:12px;
                                      font-size:11px;font-weight:500;white-space:nowrap;
                                      margin-left:8px;">{badge_label}</span>
                     </div>
-                    <div style="font-size:12px;color:#888;margin-bottom:8px;
+                    <div style="font-size:12px;color:#374151;font-weight:500;margin-bottom:8px;
                                 line-height:1.4;">{segment.get('description', '')[:60]}</div>
-                    <div style="font-size:13px;font-weight:600;color:#5B63FE;">
+                    <div style="font-size:13px;font-weight:800;color:#2563EB;">
                         {segment.get('customer_count', 0):,} customers
                     </div>
                 </div>
@@ -1419,10 +1440,10 @@ def _analytics_tab() -> None:
     for index, customer in enumerate(customers_list[:9]):
         with cols[index % 3]:
             persona = customer.get("rfm_persona") or ""
-            color = persona_colors.get(persona, "#888")
+            color = persona_colors.get(persona, "#374151")
             st.markdown(
                 f"""
-            <div style="border:1px solid rgba(0,0,0,0.08);border-radius:10px;
+            <div style="border:1px solid rgba(37,99,235,0.18);border-radius:10px;
                         padding:12px;margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;
                             align-items:center;margin-bottom:6px;">
@@ -1433,14 +1454,14 @@ def _analytics_tab() -> None:
                                  font-size:10px;font-weight:600;">
                         {persona}</span>
                 </div>
-                <div style="font-size:11px;color:#888;margin-bottom:6px;">
+                <div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:6px;">
                     {customer['city']} &middot; Age {customer.get('age', '')}
                 </div>
                 <div style="display:flex;gap:12px;font-size:12px;">
-                    <div><span style="color:#888;">Orders</span>
+                    <div><span style="color:#111827;font-weight:600;">Orders</span>
                          <strong style="margin-left:4px;">
                          {customer.get('total_orders', 0)}</strong></div>
-                    <div><span style="color:#888;">Spend</span>
+                    <div><span style="color:#111827;font-weight:600;">Spend</span>
                          <strong style="margin-left:4px;">
                          Rs {customer.get('total_spend', 0):,.0f}</strong></div>
                 </div>
@@ -1470,7 +1491,7 @@ def _analytics_tab() -> None:
         if profile:
             with st.container(border=True):
                 persona = profile.get("rfm_persona") or ""
-                color = persona_colors.get(persona, "#888")
+                color = persona_colors.get(persona, "#374151")
                 st.markdown(
                     f"""
                 <div style="display:flex;align-items:center;gap:16px;
@@ -1484,7 +1505,7 @@ def _analytics_tab() -> None:
                     <div>
                         <div style="font-size:18px;font-weight:700;">
                             {profile['name']}</div>
-                        <div style="font-size:12px;color:#888;">
+                        <div style="font-size:12px;color:#374151;font-weight:500;">
                             {profile.get('email', '')} &middot; {profile.get('phone', '')}</div>
                     </div>
                     <span style="background:{color}22;color:{color};
@@ -1586,7 +1607,7 @@ def _sidebar() -> None:
         </div>
         <div>
             <div style="font-weight:600;font-size:15px;line-height:1.2;">StyleHub</div>
-            <div style="font-size:11px;color:#888;line-height:1.2;">CRM &middot; Powered by Xeno</div>
+            <div style="font-size:11px;color:#374151;font-weight:600;line-height:1.2;">CRM &middot; Powered by Xeno</div>
         </div>
     </div>
     """,
@@ -1624,9 +1645,9 @@ def _sidebar() -> None:
                 <div style="display:flex;justify-content:space-between;
                             font-size:12px;margin-bottom:3px;">
                     <span>{label}</span>
-                    <span style="color:#888;">{count} &middot; {pct:.0f}%</span>
+                    <span style="color:#111827;font-weight:600;">{count} &middot; {pct:.0f}%</span>
                 </div>
-                <div style="background:#f0f0f0;border-radius:4px;height:6px;">
+                <div style="background:#D1D5DB;border-radius:4px;height:6px;">
                     <div style="width:{min(pct, 100):.1f}%;background:{color};
                                 border-radius:4px;height:6px;"></div>
                 </div>
@@ -1727,7 +1748,13 @@ def _agent_tab() -> None:
     with col_preview:
         preview_card = st.container(border=True)
     with preview_card:
-        st.markdown("**Campaign preview**")
+        st.markdown(
+            """
+            <div style="font-size:16px;font-weight:800;color:#111827;
+                        margin-bottom:0.5rem;">Campaign preview</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         seg_prev = st.session_state.get("segment_preview")
         camp_draft = st.session_state.get("campaign_draft")
@@ -1739,10 +1766,10 @@ def _agent_tab() -> None:
             st.markdown(
                 f"""
             <div style="margin:0.75rem 0;">
-                <span style="font-size:2rem;font-weight:700;color:#5B63FE;">{count:,}</span>
-                <span style="font-size:14px;color:#888;margin-left:8px;">customers matched</span>
+                <span style="font-size:2rem;font-weight:800;color:#2563EB;">{count:,}</span>
+                <span style="font-size:14px;color:#111827;font-weight:700;margin-left:8px;">customers matched</span>
             </div>
-            <div style="font-size:13px;color:#555;margin-bottom:1rem;
+            <div style="font-size:13px;color:#1F2937;font-weight:500;margin-bottom:1rem;
                         line-height:1.5;">{summary}</div>
             """,
                 unsafe_allow_html=True,
@@ -1755,15 +1782,15 @@ def _agent_tab() -> None:
                 st.markdown(
                     f"""
                 <div style="display:flex;justify-content:space-between;align-items:center;
-                            padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);
+                            padding:8px 0;border-bottom:1px solid rgba(17,24,39,0.12);
                             font-size:13px;">
                     <div>
-                        <div style="font-weight:500;">{customer.get("name", "")}</div>
-                        <div style="color:#888;font-size:11px;">
+                        <div style="font-weight:700;color:#111827;">{customer.get("name", "")}</div>
+                        <div style="color:#374151;font-size:11px;font-weight:500;">
                             {customer.get("city", "")} &middot; Last order: {days_str}
                         </div>
                     </div>
-                    <div style="color:#5B63FE;font-weight:500;">Rs {spend:,.0f}</div>
+                    <div style="color:#2563EB;font-weight:800;">Rs {spend:,.0f}</div>
                 </div>
                 """,
                     unsafe_allow_html=True,
@@ -1771,7 +1798,7 @@ def _agent_tab() -> None:
         else:
             st.markdown(
                 """
-            <div style="color:#bbb;font-size:13px;margin-top:1rem;line-height:1.6;">
+            <div style="color:#374151;font-size:13px;font-weight:500;margin-top:1rem;line-height:1.6;">
                 Your matched audience will appear here once
                 the agent finds customers matching your description.
             </div>
@@ -1858,12 +1885,12 @@ def _journeys_tab() -> None:
                 f"""
             <div class="xeno-journey-card">
                 <div class="xeno-journey-icon">{escape(str(template['icon']))}</div>
-                <div style="font-size:14px;font-weight:600;color:#1A1A2E;margin-bottom:5px;">
+                <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:5px;">
                     {escape(str(template['name']))}</div>
-                <div style="font-size:12px;color:#6B7280;line-height:1.45;margin-bottom:12px;">
+                <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;margin-bottom:12px;">
                     {escape(str(template['description']))}</div>
-                <div style="font-size:12px;background:#F3F4F6;padding:8px 10px;
-                            border-radius:8px;color:#374151;line-height:1.35;">
+                <div style="font-size:12px;background:#EAF1FF;padding:8px 10px;
+                            border-radius:8px;color:#111827;font-weight:500;line-height:1.35;">
                     {escape(str(template['default_message'])[:78])}...
                 </div>
             </div>
@@ -1900,7 +1927,7 @@ def _journeys_tab() -> None:
 
     if active_journeys:
         for journey in active_journeys:
-            status_color = "#22c55e" if journey["status"] == "active" else "#6B7280"
+            status_color = "#22c55e" if journey["status"] == "active" else "#374151"
             st.markdown(
                 f"""
             <div class="xeno-active-journey">
@@ -1909,17 +1936,17 @@ def _journeys_tab() -> None:
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
                             <span style="width:8px;height:8px;background:{status_color};
                                          border-radius:50%;display:inline-block;"></span>
-                            <span style="font-size:14px;font-weight:600;color:#1A1A2E;">
+                            <span style="font-size:14px;font-weight:700;color:#111827;">
                                 {escape(str(journey['name']))}</span>
                             <span class="xeno-channel-pill">
                                 <span class="xeno-channel-icon">W</span>{escape(str(journey['channel']).title())}
                             </span>
                         </div>
-                        <div style="font-size:12px;color:#6B7280;line-height:1.45;">
+                        <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;">
                             {escape(str(journey['message_template'])[:100])}...
                         </div>
                     </div>
-                    <div style="font-size:12px;color:#6B7280;text-align:right;min-width:180px;">
+                    <div style="font-size:12px;color:#111827;font-weight:600;text-align:right;min-width:180px;">
                         <strong style="color:#2563EB;">{journey['customers_enrolled']}</strong> enrolled<br>
                         <strong style="color:#2563EB;">{journey['campaigns_triggered']}</strong> campaigns triggered
                     </div>
