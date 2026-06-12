@@ -53,10 +53,14 @@ st.markdown(
 }
 [data-testid="stMetric"] {
     background: #FFFFFF;
-    border: 1px solid rgba(37,99,235,0.18);
+    border: 1px solid rgba(17,24,39,0.10);
     border-radius: 8px;
     padding: 1rem;
-    box-shadow: 0 6px 18px rgba(37,99,235,0.06);
+    box-shadow: 0 6px 16px rgba(17,24,39,0.04);
+}
+[data-testid="stSidebar"] [data-testid="stMetric"] {
+    border-color: rgba(17,24,39,0.10);
+    box-shadow: none;
 }
 [data-testid="stMetricLabel"] p {
     color: #111827 !important;
@@ -76,7 +80,7 @@ st.markdown(
 }
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #FFFFFF !important;
-    border: 1px solid rgba(37,99,235,0.22) !important;
+    border: 1px solid rgba(17,24,39,0.10) !important;
     border-radius: 12px !important;
 }
 div[data-testid="stTabs"] { margin-top: 0.5rem; }
