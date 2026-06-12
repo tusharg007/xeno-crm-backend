@@ -821,6 +821,72 @@ def _sync_agent_state(data: dict) -> None:
     st.session_state.session_id = data.get("session_id") or st.session_state.session_id
 
 
+def _is_campaign_performance_prompt(text: str) -> bool:
+    lowered = text.lower()
+    return (
+        "campaign performance" in lowered
+        or "campaign stats" in lowered
+        or "campaign analytics" in lowered
+        or (
+            "campaign" in lowered
+            and any(word in lowered for word in ["performance", "stats", "analytics", "delivery", "open", "revenue"])
+        )
+    )
+
+
+def _rate_percent(numerator: int | float, denominator: int | float) -> float:
+    return round(float(numerator or 0) / max(float(denominator or 0), 1.0) * 100, 1)
+
+
+def _local_campaign_performance_reply() -> str:
+    try:
+        campaigns_resp = _request_backend("GET", "/campaigns", timeout=8).json()
+        campaigns = campaigns_resp.get("data", [])
+    except Exception:
+        campaigns_resp = _get_json("/campaigns", {"data": []})
+        campaigns = campaigns_resp.get("data", [])
+
+    if not campaigns:
+        return (
+            "There is no campaign performance to show yet because no campaigns have "
+            "been launched. Create or run a campaign first, then check Analytics."
+        )
+
+    latest = campaigns[:5]
+    total_sent = sum(c.get("total_sent", 0) for c in latest)
+    total_delivered = sum(c.get("total_delivered", 0) for c in latest)
+    total_opened = sum(c.get("total_opened", 0) for c in latest)
+    total_clicked = sum(c.get("total_clicked", 0) for c in latest)
+    total_failed = sum(c.get("total_failed", 0) for c in latest)
+    total_orders = sum(c.get("total_attributed_orders", 0) for c in latest)
+    total_revenue = sum(c.get("total_attributed_revenue", 0.0) for c in latest)
+
+    rows = [
+        (
+            f"* {campaign.get('name', 'Campaign')}: {campaign.get('status', 'unknown')}, "
+            f"{campaign.get('total_sent', 0)} targeted, "
+            f"{_rate_percent(campaign.get('total_delivered', 0), campaign.get('total_sent', 0))}% delivered, "
+            f"{_rate_percent(campaign.get('total_opened', 0), campaign.get('total_delivered', 0))}% opened, "
+            f"{campaign.get('total_attributed_orders', 0)} returned orders, "
+            f"Rs {float(campaign.get('total_attributed_revenue', 0.0)):,.0f} revenue"
+        )
+        for campaign in latest
+    ]
+
+    return (
+        f"I found {len(campaigns)} campaigns.\n\n"
+        f"Latest {len(latest)} campaign performance:\n"
+        + "\n".join(rows)
+        + "\n\n"
+        f"Overall for these campaigns: {total_sent} targeted, "
+        f"{_rate_percent(total_delivered, total_sent)}% delivered, "
+        f"{_rate_percent(total_opened, total_delivered)}% opened, "
+        f"{_rate_percent(total_clicked, total_opened)}% click-to-open, "
+        f"{total_failed} failed, {total_orders} returned orders, "
+        f"Rs {total_revenue:,.0f} attributed revenue."
+    )
+
+
 def _sidebar_legacy() -> None:
     st.markdown("## 💙 StyleHub")
     st.caption("Powered by Xeno CRM")
@@ -888,6 +954,14 @@ def _agent_tab_legacy() -> None:
             with st.chat_message("assistant"):
                 with st.spinner("Xeno is thinking..."):
                     try:
+                        if _is_campaign_performance_prompt(user_input):
+                            reply = _local_campaign_performance_reply()
+                            st.markdown(reply)
+                            st.session_state.messages.append(
+                                {"role": "assistant", "content": reply}
+                            )
+                            st.rerun()
+
                         response = _post_json(
                             "/agent/chat",
                             {
@@ -1849,6 +1923,14 @@ def _agent_tab() -> None:
             with st.chat_message("assistant"):
                 with st.spinner("Xeno is thinking..."):
                     try:
+                        if _is_campaign_performance_prompt(user_input):
+                            reply = _local_campaign_performance_reply()
+                            st.markdown(reply)
+                            st.session_state.messages.append(
+                                {"role": "assistant", "content": reply}
+                            )
+                            st.rerun()
+
                         response = _post_json(
                             "/agent/chat",
                             {
