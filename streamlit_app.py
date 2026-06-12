@@ -61,6 +61,11 @@ st.markdown(
     border-radius: 8px;
     overflow: hidden;
 }
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(37,99,235,0.22) !important;
+    border-radius: 12px !important;
+}
 div[data-testid="stTabs"] { margin-top: 0.5rem; }
 div[data-testid="stTabs"] button {
     min-height: 2.2rem;
@@ -93,6 +98,41 @@ h2, h3 {
 }
 .stButton > button {
     border-radius: 8px !important;
+    background: #FFFFFF !important;
+    color: #111827 !important;
+    border: 1px solid rgba(17,24,39,0.22) !important;
+    font-weight: 700 !important;
+}
+.stChatInput {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(37,99,235,0.20) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 20px rgba(37,99,235,0.08);
+}
+.xeno-agent-panel {
+    background: #FFFFFF;
+    border: 1px solid rgba(37,99,235,0.18);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 10px 24px rgba(37,99,235,0.07);
+}
+.xeno-preview-panel {
+    background: #FFFFFF;
+    border: 1px solid rgba(37,99,235,0.26);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 12px 28px rgba(37,99,235,0.10);
+}
+.xeno-empty-preview {
+    background: #F8FAFF;
+    border: 1px dashed rgba(37,99,235,0.30);
+    border-radius: 10px;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.55;
+    padding: 14px;
+    margin-top: 10px;
 }
 .xeno-card {
     background: #FFFFFF;
@@ -336,74 +376,10 @@ h2, h3 {
     background: #2563EB;
     border-radius: 999px;
 }
-.xeno-journey-card {
-    background: #FFFFFF;
-    border: 1px solid rgba(37,99,235,0.18);
-    border-radius: 8px;
-    padding: 14px;
-    min-height: 150px;
-    margin-bottom: 8px;
-}
-.xeno-journey-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    background: rgba(37,99,235,0.1);
-    color: #2563EB;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 10px;
-}
-.xeno-active-journey {
-    background: #FFFFFF;
-    border: 1px solid rgba(37,99,235,0.18);
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 10px;
-}
-.xeno-journey-summary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    margin: 6px 0 14px;
-}
-.xeno-journey-summary-card {
-    background: #FFFFFF;
-    border: 1px solid rgba(37,99,235,0.18);
-    border-radius: 8px;
-    padding: 13px 14px;
-}
-.xeno-journey-summary-label {
-    color: #111827;
-    font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-.xeno-journey-summary-value {
-    color: #2563EB;
-    font-size: 26px;
-    font-weight: 800;
-    line-height: 1;
-}
-.xeno-template-state {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    padding: 3px 9px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #166534;
-    background: rgba(34,197,94,0.12);
-    margin-bottom: 8px;
-}
 @media (max-width: 900px) {
     .xeno-kpi-grid,
     .xeno-rfm-grid,
-    .xeno-attribute-grid,
-    .xeno-journey-summary {
+    .xeno-attribute-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .xeno-page-title { font-size: 21px; }
@@ -416,8 +392,7 @@ h2, h3 {
     .block-container { padding-top: 2rem !important; }
     .xeno-kpi-grid,
     .xeno-rfm-grid,
-    .xeno-attribute-grid,
-    .xeno-journey-summary {
+    .xeno-attribute-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -1892,153 +1867,124 @@ def _agent_tab() -> None:
 
 
 def _journeys_tab() -> None:
-    st.markdown("### Lifecycle journeys")
-    st.caption("Automated campaigns triggered by customer behaviour. Configure once, run whenever eligible customers appear.")
-
     try:
+        st.markdown("### Lifecycle journeys")
+        st.caption(
+            "Automated campaigns triggered by customer behaviour. "
+            "Configure once, then run when eligible customers appear."
+        )
+
         templates = _request_backend("GET", "/journeys/templates", timeout=5).json()
         journeys_r = _request_backend("GET", "/journeys", timeout=5).json()
-        active_journeys = journeys_r if isinstance(journeys_r, list) else []
-    except Exception as exc:
-        st.error(f"Cannot load journeys yet: {exc}")
-        templates, active_journeys = [], []
+        journeys = journeys_r if isinstance(journeys_r, list) else []
+        templates = templates if isinstance(templates, list) else []
 
-    notice = st.session_state.pop("journey_notice", None)
-    if notice:
-        st.success(notice)
+        notice = st.session_state.pop("journey_notice", None)
+        if notice:
+            st.success(notice)
 
-    active_count = sum(1 for journey in active_journeys if journey.get("status") == "active")
-    paused_count = sum(1 for journey in active_journeys if journey.get("status") == "paused")
-    total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in active_journeys)
-    metric_cols = st.columns(3)
-    metric_cols[0].metric("Active journeys", active_count)
-    metric_cols[1].metric("Paused journeys", paused_count)
-    metric_cols[2].metric("Campaigns triggered", total_triggered)
+        active_count = sum(1 for journey in journeys if journey.get("status") == "active")
+        paused_count = sum(1 for journey in journeys if journey.get("status") == "paused")
+        total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in journeys)
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Active journeys", active_count)
+        summary_cols[1].metric("Paused journeys", paused_count)
+        summary_cols[2].metric("Campaigns triggered", total_triggered)
 
-    st.subheader("Active journeys")
-    st.caption("Run, pause, or resume lifecycle automations. Templates remain available below.")
+        st.divider()
+        st.subheader("Active journeys")
+        if journeys:
+            for journey in journeys:
+                status = str(journey.get("status", "active"))
+                journey_id = str(journey.get("id", ""))
+                st.markdown(f"**{journey.get('name', 'Journey')}**")
+                st.caption(
+                    f"{status.title()} | {str(journey.get('channel', 'whatsapp')).title()} | "
+                    f"{journey.get('customers_enrolled', 0)} enrolled | "
+                    f"{journey.get('campaigns_triggered', 0)} campaigns triggered"
+                )
+                st.write(str(journey.get("message_template", ""))[:140] + "...")
 
-    if active_journeys:
-        for journey in active_journeys:
-            status = journey.get("status", "active")
-            with st.container(border=True):
-                info_col, stat_col = st.columns([4, 1.4])
-                with info_col:
-                    st.markdown(f"**{journey.get('name', 'Journey')}**")
-                    st.caption(
-                        f"{status.title()} on {str(journey.get('channel', 'whatsapp')).title()} | "
-                        f"{str(journey.get('message_template', ''))[:110]}..."
-                    )
-                with stat_col:
-                    st.metric("Enrolled", journey.get("customers_enrolled", 0))
-                    st.metric("Triggered", journey.get("campaigns_triggered", 0))
-
-                run_col, toggle_col, hint_col = st.columns([1.1, 1.1, 3.8])
+                run_col, toggle_col, hint_col = st.columns([1, 1, 4])
                 with run_col:
                     if st.button(
                         "Run now",
-                        key=f"trigger_{journey['id']}",
-                        use_container_width=True,
+                        key=f"trigger_{journey_id}",
                         disabled=status != "active",
+                        use_container_width=True,
                     ):
-                        try:
-                            response = _post_json(
-                                f"/journeys/{journey['id']}/trigger",
-                                timeout=15,
+                        response = _post_json(f"/journeys/{journey_id}/trigger", timeout=15)
+                        if response.ok:
+                            data = response.json()
+                            queued = data.get("queued", 0)
+                            matched = data.get("matched", 0)
+                            reason = data.get("reason")
+                            st.session_state.journey_notice = (
+                                f"Journey queued {queued} customers."
+                                if queued
+                                else f"Journey matched {matched} customers but queued 0: "
+                                f"{reason or 'no eligible customers'}."
                             )
-                            if response.ok:
-                                data = response.json()
-                                queued = data.get("queued", 0)
-                                matched = data.get("matched", 0)
-                                reason = data.get("reason")
-                                if queued:
-                                    st.session_state.journey_notice = (
-                                        f"Journey '{journey['name']}' created a campaign "
-                                        f"for {queued} eligible customers."
-                                    )
-                                else:
-                                    st.session_state.journey_notice = (
-                                        f"Journey '{journey['name']}' matched {matched} customers "
-                                        f"but queued 0. Reason: {reason or 'no eligible customers'}."
-                                    )
-                                st.rerun()
-                            else:
-                                st.error("Trigger failed.")
-                        except Exception as exc:
-                            st.error(str(exc))
+                            st.rerun()
+                        st.error("Trigger failed.")
                 with toggle_col:
                     action_label = "Pause" if status == "active" else "Resume"
-                    if st.button(
-                        action_label,
-                        key=f"pause_{journey['id']}",
-                        use_container_width=True,
-                    ):
-                        try:
-                            response = _post_json(f"/journeys/{journey['id']}/pause")
-                            if response.ok:
-                                next_state = "paused" if action_label == "Pause" else "active"
-                                st.session_state.journey_notice = (
-                                    f"Journey '{journey['name']}' is now {next_state}."
-                                )
-                                st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
+                    if st.button(action_label, key=f"pause_{journey_id}", use_container_width=True):
+                        response = _post_json(f"/journeys/{journey_id}/pause")
+                        if response.ok:
+                            next_state = "paused" if action_label == "Pause" else "active"
+                            st.session_state.journey_notice = f"Journey is now {next_state}."
+                            st.rerun()
+                        st.error("Status update failed.")
                 with hint_col:
                     st.caption(
-                        "Resume this journey before running it."
-                        if status != "active"
-                        else "Run now creates a campaign from current eligible customers."
+                        "Resume before running." if status != "active"
+                        else "Run now creates a campaign from eligible customers."
                     )
-    else:
-        st.info("No journeys yet. Activate one from the templates below.")
+                st.divider()
+        else:
+            st.info("No journeys yet. Activate a template below.")
 
-    st.subheader("Journey templates")
-    st.caption("Pick a lifecycle playbook. Existing templates stay visible and can be activated again.")
-    active_by_type: dict[str, int] = {}
-    for journey in active_journeys:
-        journey_type = str(journey.get("journey_type", ""))
-        active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
+        st.subheader("Journey templates")
+        active_by_type: dict[str, int] = {}
+        for journey in journeys:
+            journey_type = str(journey.get("journey_type", ""))
+            active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
 
-    cols = st.columns(2)
-    for index, template in enumerate(templates):
-        template_type = str(template["type"])
-        existing_count = active_by_type.get(template_type, 0)
-        with cols[index % 2]:
-            with st.container(border=True):
+        cols = st.columns(2)
+        for index, template in enumerate(templates):
+            template_type = str(template.get("type", f"template_{index}"))
+            existing_count = active_by_type.get(template_type, 0)
+            with cols[index % 2]:
+                st.markdown(f"**{template.get('name', 'Journey template')}**")
                 if existing_count:
                     st.caption(f"{existing_count} configured")
-                st.markdown(f"**{template['name']}**")
-                st.caption(str(template["description"]))
-                st.info(str(template["default_message"])[:120] + "...")
+                st.caption(str(template.get("description", "")))
+                st.write(str(template.get("default_message", ""))[:120] + "...")
 
-            button_label = "Activate another" if existing_count else "Activate"
-            if st.button(
-                button_label,
-                key=f"activate_{template_type}",
-                use_container_width=True,
-                type="primary" if not existing_count else "secondary",
-            ):
-                try:
+                button_label = "Activate another" if existing_count else "Activate"
+                if st.button(button_label, key=f"activate_{template_type}", use_container_width=True):
                     response = _post_json(
                         "/journeys/",
                         {
-                            "name": template["name"],
-                            "journey_type": template["type"],
-                            "trigger_rules": template["trigger_rules"],
-                            "message_template": template["default_message"],
+                            "name": template.get("name", "Journey"),
+                            "journey_type": template_type,
+                            "trigger_rules": template.get("trigger_rules", {}),
+                            "message_template": template.get("default_message", ""),
                             "channel": "whatsapp",
                         },
                     )
                     if response.ok:
                         st.session_state.journey_notice = (
-                            f"Journey '{template['name']}' activated. "
-                            "It is now listed in the control center above."
+                            f"Journey '{template.get('name', 'Journey')}' activated."
                         )
                         st.rerun()
-                    else:
-                        st.error("Activation failed.")
-                except Exception as exc:
-                    st.error(f"Failed: {exc}")
+                    st.error("Activation failed.")
+                st.divider()
+    except Exception as exc:
+        if exc.__class__.__name__ in {"RerunException", "StopException"}:
+            raise
+        st.error(f"Journeys could not load: {exc}")
 
 
 _init_session_state()
