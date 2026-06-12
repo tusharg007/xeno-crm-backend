@@ -29,13 +29,13 @@ from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 
 from agent.groq_utils import GROQ_UNAVAILABLE_MESSAGE, build_groq_model, retry_async_groq_call
 from agent.tools import CATEGORY_ALIASES, get_tools
 from config import settings
 from database import SessionLocal
-from models import Customer, Order, Segment
+from models import Campaign, Customer, Order, Segment
 from routers.segments import execute_segment_filter
 
 
@@ -236,6 +236,54 @@ def _category_insights_response(gender: str | None, db) -> dict:
     }
 
 
+def _rate(numerator: int | float, denominator: int | float) -> float:
+    return round((float(numerator or 0) / float(denominator or 1)) * 100, 1)
+
+
+def _campaign_performance_response(db) -> dict:
+    campaigns = db.scalars(
+        select(Campaign).order_by(desc(Campaign.created_at)).limit(5)
+    ).all()
+    total_campaigns = db.scalar(select(func.count()).select_from(Campaign)) or 0
+    if not campaigns:
+        response = "There is no campaign performance to show yet because no campaigns have been launched."
+    else:
+        total_sent = sum(campaign.total_sent or 0 for campaign in campaigns)
+        total_delivered = sum(campaign.total_delivered or 0 for campaign in campaigns)
+        total_opened = sum(campaign.total_opened or 0 for campaign in campaigns)
+        total_clicked = sum(campaign.total_clicked or 0 for campaign in campaigns)
+        total_failed = sum(campaign.total_failed or 0 for campaign in campaigns)
+        total_orders = sum(campaign.total_attributed_orders or 0 for campaign in campaigns)
+        total_revenue = sum(campaign.total_attributed_revenue or 0.0 for campaign in campaigns)
+        lines = [
+            f"* {campaign.name}: {campaign.status}, {campaign.total_sent or 0} targeted, "
+            f"{_rate(campaign.total_delivered, campaign.total_sent)}% delivered, "
+            f"{_rate(campaign.total_opened, campaign.total_delivered)}% opened, "
+            f"{campaign.total_attributed_orders or 0} returned orders, "
+            f"Rs {campaign.total_attributed_revenue or 0.0:,.0f} revenue"
+            for campaign in campaigns
+        ]
+        response = (
+            f"I found {int(total_campaigns)} campaigns.\n\n"
+            f"Latest {len(campaigns)} campaign performance:\n"
+            + "\n".join(lines)
+            + "\n\n"
+            f"Overall for these campaigns: {total_sent} targeted, "
+            f"{_rate(total_delivered, total_sent)}% delivered, "
+            f"{_rate(total_opened, total_delivered)}% opened, "
+            f"{_rate(total_clicked, total_opened)}% click-to-open, "
+            f"{total_failed} failed, {total_orders} returned orders, "
+            f"Rs {total_revenue:,.0f} attributed revenue."
+        )
+    return {
+        "response": response,
+        "segment_preview": None,
+        "campaign_draft": None,
+        "awaiting_approval": False,
+        "pending_segment_id": None,
+    }
+
+
 def _draft_for_saved_segment(session: dict, db) -> dict | None:
     preview = session.get("segment_preview") or {}
     filter_rules = preview.get("filter_rules")
@@ -295,6 +343,14 @@ def _deterministic_response(message: str, session: dict, db) -> dict | None:
         saved = _draft_for_saved_segment(session, db)
         if saved:
             return saved
+
+    if (
+        "campaign performance" in lowered
+        or "campaign stats" in lowered
+        or "campaign analytics" in lowered
+        or ("campaign" in lowered and any(word in lowered for word in ["performance", "stats", "analytics", "revenue", "delivery", "open"]))
+    ):
+        return _campaign_performance_response(db)
 
     gender = _normalize_gender(f" {lowered} ")
     category = _normalize_category_from_text(lowered)

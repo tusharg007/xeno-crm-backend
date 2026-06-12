@@ -2030,7 +2030,7 @@ def _journeys_tab() -> None:
             journey_id = str(journey.get("id", ""))
             status_label = "Active" if status == "active" else "Paused"
             channel = str(journey.get("channel", "whatsapp")).title()
-            campaign_active = journey_id in st.session_state.running_journey_ids
+            campaign_active = status == "active"
             with st.container(border=True):
                 title_col, status_col = st.columns([4, 1])
                 title_col.markdown(f"**{journey.get('name', 'Journey')}**")
@@ -2043,7 +2043,7 @@ def _journeys_tab() -> None:
 
                 run_col, toggle_col, hint_col = st.columns([1, 1, 3], gap="medium")
                 with run_col:
-                    if campaign_active and status == "active":
+                    if campaign_active:
                         st.button(
                             "Campaign active",
                             key=f"active_{journey_id}",
@@ -2088,8 +2088,8 @@ def _journeys_tab() -> None:
                             _rerun_on_page("Journeys")
                         st.error("Status update failed.")
                 with hint_col:
-                    if campaign_active and status == "active":
-                        st.caption("Campaign is active. Pause the journey to reset the manual run control.")
+                    if campaign_active:
+                        st.caption("Journey automation is active. Pause it to bring back the manual run control.")
                     elif status != "active":
                         st.caption("Resume before running.")
                     else:
