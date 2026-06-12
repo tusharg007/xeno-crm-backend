@@ -222,6 +222,10 @@ h2, h3 {
     font-size: 9px;
     font-weight: 700;
 }
+.xeno-channel-icon-muted {
+    background: #E5E7EB;
+    color: #6B7280;
+}
 .xeno-status {
     display: inline-flex;
     align-items: center;
@@ -424,23 +428,24 @@ def _channel_pills(channel: str) -> str:
         "whatsapp": "W",
         "sms": "S",
         "email": "E",
-        "rcs": "R",
     }
-    labels = {
+    names = {
         "whatsapp": "WhatsApp",
         "sms": "SMS",
         "email": "Email",
-        "rcs": "RCS",
     }
-    channels = [part.strip().lower() for part in str(channel or "").split(",") if part.strip()]
-    if not channels:
-        channels = ["whatsapp"]
-    return "".join(
+    active = {part.strip().lower() for part in str(channel or "").split(",") if part.strip()}
+    if not active:
+        active = {"whatsapp"}
+    active_label = ", ".join(names.get(ch, ch.title()) for ch in icons if ch in active)
+    return (
         '<span class="xeno-channel-pill">'
-        f'<span class="xeno-channel-icon">{icons.get(ch, "M")}</span>'
-        f'{escape(labels.get(ch, ch.title()))}'
-        '</span>'
-        for ch in channels
+        + "".join(
+            f'<span class="xeno-channel-icon{"" if ch in active else " xeno-channel-icon-muted"}">{label}</span>'
+            for ch, label in icons.items()
+        )
+        + f'<span style="margin-left:4px;">{escape(active_label)}</span>'
+        + '</span>'
     )
 
 
