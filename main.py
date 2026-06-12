@@ -35,6 +35,17 @@ app.include_router(journeys_router, prefix="/journeys", tags=["journeys"])
 app.include_router(receipts_router, prefix="", tags=["receipts"])
 
 
+@app.get("/")
+async def home() -> dict[str, str]:
+    return {
+        "message": "StyleHub Xeno CRM backend is live. Use /docs for APIs or the Streamlit app for the demo.",
+        "service": "xeno-crm",
+        "health": "/health",
+        "docs": "/docs",
+        "app": "https://xeno-crm-backend-5eeqqhufg62kjv6zlsuhvz.streamlit.app",
+    }
+
+
 @app.on_event("startup")
 async def startup_event():
     """Create tables and auto-seed if database is empty.
@@ -80,12 +91,13 @@ async def health(db: Session = Depends(get_db)):
     except Exception as e:
         checks["database"] = f"error: {str(e)}"
 
+    channel_url = settings.CHANNEL_SERVICE_URL.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{settings.CHANNEL_SERVICE_URL}/health")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{channel_url}/health")
             checks["channel_service"] = "ok" if r.status_code == 200 else f"http {r.status_code}"
-    except Exception:
-        checks["channel_service"] = "unreachable"
+    except Exception as e:
+        checks["channel_service"] = f"unreachable: {type(e).__name__}"
 
     overall = "ok" if all(v.startswith("ok") for v in checks.values()) else "degraded"
     return {"status": overall, "service": "xeno-crm", "checks": checks}
