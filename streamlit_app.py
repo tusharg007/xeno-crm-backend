@@ -12,6 +12,13 @@ import streamlit as st
 
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL", "http://localhost:8000")
 BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "4"))
+PAGES = ["AI Campaign Agent", "Analytics", "Journeys"]
+PAGE_SLUGS = {
+    "AI Campaign Agent": "agent",
+    "Analytics": "analytics",
+    "Journeys": "journeys",
+}
+SLUG_TO_PAGE = {slug: page for page, slug in PAGE_SLUGS.items()}
 
 st.set_page_config(
     page_title="Xeno - StyleHub",
@@ -456,6 +463,10 @@ h2, h3 {
 
 
 def _init_session_state() -> None:
+    query_page = st.query_params.get("page", "")
+    if isinstance(query_page, list):
+        query_page = query_page[0] if query_page else ""
+    default_page = SLUG_TO_PAGE.get(str(query_page), "AI Campaign Agent")
     defaults = {
         "messages": [],
         "session_id": str(uuid4()),
@@ -464,7 +475,8 @@ def _init_session_state() -> None:
         "awaiting_approval": False,
         "pending_segment_id": None,
         "journey_notice": None,
-        "selected_page": "AI Campaign Agent",
+        "selected_page": default_page,
+        "running_journey_ids": set(),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -505,6 +517,16 @@ def _get_json(path: str, fallback):
 
 def _clear_backend_cache() -> None:
     st.cache_data.clear()
+
+
+def _set_active_page(page: str) -> None:
+    st.session_state.selected_page = page
+    st.query_params["page"] = PAGE_SLUGS.get(page, PAGE_SLUGS["AI Campaign Agent"])
+
+
+def _rerun_on_page(page: str) -> None:
+    _set_active_page(page)
+    st.rerun()
 
 
 def _format_launched_at(value: str | None) -> str:
@@ -1088,9 +1110,9 @@ def _analytics_tab_legacy() -> None:
 
 def _analytics_tab() -> None:
     try:
-        campaigns_resp = _request_backend("GET", "/campaigns").json()
+        campaigns_resp = _get_json("/campaigns", {"data": []})
         campaigns = campaigns_resp.get("data", [])
-        overview = _request_backend("GET", "/customers/stats/overview").json()
+        overview = _get_json("/customers/stats/overview", {})
         campaign_summary = _get_json("/campaigns/summary", {})
     except Exception as exc:
         st.error(
@@ -1212,7 +1234,6 @@ def _analytics_tab() -> None:
                         y=[
                             "Sent",
                             "Delivered",
-                            "Read",
                             "Opened",
                             "Clicked",
                             "Attributed Orders",
@@ -1220,7 +1241,6 @@ def _analytics_tab() -> None:
                         x=[
                             funnel.get("sent", campaign["total_sent"]),
                             funnel.get("delivered", campaign["total_delivered"]),
-                            funnel.get("read", campaign.get("total_read", 0)),
                             funnel.get("opened", campaign["total_opened"]),
                             funnel.get("clicked", campaign["total_clicked"]),
                             funnel.get(
@@ -1255,70 +1275,100 @@ def _analytics_tab() -> None:
 
             with col_d:
                 st.caption("Status breakdown")
+                sent = funnel.get("sent", campaign["total_sent"])
+                delivered = funnel.get("delivered", campaign["total_delivered"])
+                read = funnel.get("read", campaign.get("total_read", 0))
+                opened = funnel.get("opened", campaign["total_opened"])
+                clicked = funnel.get("clicked", campaign["total_clicked"])
+                failed = funnel.get("failed", campaign["total_failed"])
+                engaged = max(read, opened, clicked)
                 delivered_only = max(
                     0,
-                    campaign["total_delivered"] - campaign.get("total_read", 0),
+                    delivered - engaged,
                 )
                 read_only = max(
                     0,
-                    campaign.get("total_read", 0) - campaign["total_opened"],
+                    read - max(opened, clicked),
                 )
                 opened_only = max(
                     0,
-                    campaign["total_opened"] - campaign["total_clicked"],
+                    opened - clicked,
                 )
-                clicked = campaign["total_clicked"]
-                failed = campaign["total_failed"]
                 in_transit = max(
                     0,
-                    campaign["total_sent"]
-                    - campaign["total_delivered"]
-                    - campaign["total_failed"],
+                    sent - delivered - failed,
                 )
+                status_values = [
+                    delivered_only,
+                    read_only,
+                    opened_only,
+                    clicked,
+                    failed,
+                    in_transit,
+                ]
+                status_labels = [
+                    "Delivered only",
+                    "Read only",
+                    "Opened only",
+                    "Clicked",
+                    "Failed",
+                    "In transit",
+                ]
+                status_colors = [
+                    "#5B63FE",
+                    "#7B82FE",
+                    "#BFC2FE",
+                    "#D8DAFF",
+                    "#EF4444",
+                    "#E5E7EB",
+                ]
+                status_rows = [
+                    (label, value, color)
+                    for label, value, color in zip(status_labels, status_values, status_colors)
+                    if value > 0
+                ]
+                if not status_rows:
+                    status_rows = [("No messages", 1, "#E5E7EB")]
+                chart_labels = [row[0] for row in status_rows]
+                chart_values = [row[1] for row in status_rows]
+                chart_colors = [row[2] for row in status_rows]
 
                 donut_fig = go.Figure(
                     go.Pie(
-                        labels=[
-                            "Delivered",
-                            "Read",
-                            "Opened",
-                            "Clicked",
-                            "Failed",
-                            "In transit",
-                        ],
-                        values=[
-                            delivered_only,
-                            read_only,
-                            opened_only,
-                            clicked,
-                            failed,
-                            in_transit,
-                        ],
+                        labels=chart_labels,
+                        values=chart_values,
                         hole=0.55,
                         marker=dict(
-                            colors=[
-                                "#5B63FE",
-                                "#7B82FE",
-                                "#BFC2FE",
-                                "#D8DAFF",
-                                "#EF4444",
-                                "#E5E7EB",
-                            ],
+                            colors=chart_colors,
                             line=dict(width=0),
                         ),
                         textfont=dict(size=10),
+                        textinfo="label+value+percent",
                         textposition="outside",
+                        hovertemplate="%{label}: %{value} messages<extra></extra>",
                     )
+                )
+                donut_fig.add_annotation(
+                    text=f"<b>{sum(status_values):,}</b><br>messages",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    font=dict(size=14, color="#111827"),
                 )
                 donut_fig.update_layout(
                     margin=dict(l=0, r=0, t=10, b=40),
-                    height=240,
+                    height=280,
                     showlegend=True,
                     legend=dict(orientation="h", y=-0.2, font=dict(size=10)),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                 )
                 st.plotly_chart(donut_fig, use_container_width=True)
+                if sent and in_transit == sent:
+                    st.caption(
+                        "All messages are currently queued or in transit. "
+                        "Delivery/open/click slices will appear as callbacks arrive."
+                    )
 
             avg_delivery_rate = campaign_summary.get("overall_delivery_rate", 0)
             avg_open_rate = campaign_summary.get("overall_open_rate", 0)
@@ -1548,7 +1598,7 @@ def _analytics_tab() -> None:
                 use_container_width=True,
             ):
                 st.session_state.selected_customer_id = customer["id"]
-                st.rerun()
+                _rerun_on_page("Analytics")
 
     if st.session_state.get("selected_customer_id"):
         customer_id = st.session_state.selected_customer_id
@@ -1647,7 +1697,7 @@ def _analytics_tab() -> None:
 
                 if st.button("Close profile", key="close_profile"):
                     del st.session_state.selected_customer_id
-                    st.rerun()
+                    _rerun_on_page("Analytics")
 
     running_campaigns = [c for c in campaigns if c["status"] == "running"]
     if running_campaigns:
@@ -1666,8 +1716,9 @@ def _analytics_tab() -> None:
         """,
             unsafe_allow_html=True,
         )
-        time.sleep(4)
-        st.rerun()
+        if st.button("Refresh live metrics", key="refresh_analytics", use_container_width=True):
+            _clear_backend_cache()
+            _rerun_on_page("Analytics")
 
 
 def _sidebar() -> None:
@@ -1934,8 +1985,7 @@ def _agent_tab() -> None:
 
 def _render_navigation() -> None:
     nav_cols = st.columns([1.2, 0.9, 0.9, 5.5])
-    pages = ["AI Campaign Agent", "Analytics", "Journeys"]
-    for col, page in zip(nav_cols[:3], pages):
+    for col, page in zip(nav_cols[:3], PAGES):
         with col:
             if st.button(
                 page,
@@ -1943,8 +1993,7 @@ def _render_navigation() -> None:
                 type="primary" if st.session_state.selected_page == page else "secondary",
                 use_container_width=True,
             ):
-                st.session_state.selected_page = page
-                st.rerun()
+                _rerun_on_page(page)
     st.markdown('<div class="xeno-nav-spacer"></div>', unsafe_allow_html=True)
 
 
@@ -1981,6 +2030,7 @@ def _journeys_tab() -> None:
             journey_id = str(journey.get("id", ""))
             status_label = "Active" if status == "active" else "Paused"
             channel = str(journey.get("channel", "whatsapp")).title()
+            campaign_active = journey_id in st.session_state.running_journey_ids
             with st.container(border=True):
                 title_col, status_col = st.columns([4, 1])
                 title_col.markdown(f"**{journey.get('name', 'Journey')}**")
@@ -1993,43 +2043,57 @@ def _journeys_tab() -> None:
 
                 run_col, toggle_col, hint_col = st.columns([1, 1, 3], gap="medium")
                 with run_col:
-                    if st.button(
-                        "Run now",
-                        key=f"trigger_{journey_id}",
-                        type="primary",
-                        disabled=status != "active",
-                        use_container_width=True,
-                    ):
-                        response = _post_json(f"/journeys/{journey_id}/trigger", timeout=15)
-                        if response.ok:
-                            data = response.json()
-                            queued = data.get("queued", 0)
-                            matched = data.get("matched", 0)
-                            reason = data.get("reason")
-                            st.session_state.journey_notice = (
-                                f"Journey queued {queued} customers."
-                                if queued
-                                else f"Journey matched {matched} customers but queued 0: "
-                                f"{reason or 'no eligible customers'}."
-                            )
-                            _clear_backend_cache()
-                            st.rerun()
-                        st.error("Trigger failed.")
+                    if campaign_active and status == "active":
+                        st.button(
+                            "Campaign active",
+                            key=f"active_{journey_id}",
+                            disabled=True,
+                            use_container_width=True,
+                        )
+                    else:
+                        if st.button(
+                            "Run now",
+                            key=f"trigger_{journey_id}",
+                            type="primary",
+                            disabled=status != "active",
+                            use_container_width=True,
+                        ):
+                            response = _post_json(f"/journeys/{journey_id}/trigger", timeout=15)
+                            if response.ok:
+                                data = response.json()
+                                queued = data.get("queued", 0)
+                                matched = data.get("matched", 0)
+                                reason = data.get("reason")
+                                if queued:
+                                    st.session_state.running_journey_ids.add(journey_id)
+                                st.session_state.journey_notice = (
+                                    f"Journey queued {queued} customers."
+                                    if queued
+                                    else f"Journey matched {matched} customers but queued 0: "
+                                    f"{reason or 'no eligible customers'}."
+                                )
+                                _clear_backend_cache()
+                                _rerun_on_page("Journeys")
+                            st.error("Trigger failed.")
                 with toggle_col:
                     action_label = "Pause" if status == "active" else "Resume"
                     if st.button(action_label, key=f"pause_{journey_id}", use_container_width=True):
                         response = _post_json(f"/journeys/{journey_id}/pause")
                         if response.ok:
                             next_state = "paused" if action_label == "Pause" else "active"
+                            if action_label == "Pause":
+                                st.session_state.running_journey_ids.discard(journey_id)
                             st.session_state.journey_notice = f"Journey is now {next_state}."
                             _clear_backend_cache()
-                            st.rerun()
+                            _rerun_on_page("Journeys")
                         st.error("Status update failed.")
                 with hint_col:
-                    st.caption(
-                        "Resume before running." if status != "active"
-                        else "Run now creates a campaign from eligible customers."
-                    )
+                    if campaign_active and status == "active":
+                        st.caption("Campaign is active. Pause the journey to reset the manual run control.")
+                    elif status != "active":
+                        st.caption("Resume before running.")
+                    else:
+                        st.caption("Run now creates a campaign from eligible customers.")
     else:
         st.info("No journeys yet. Activate one from the templates below.")
 
@@ -2081,11 +2145,20 @@ def _journeys_tab() -> None:
                             f"Journey '{template.get('name', 'Journey')}' activated."
                         )
                         _clear_backend_cache()
-                        st.rerun()
+                        _rerun_on_page("Journeys")
                     st.error("Activation failed.")
 
 
 _init_session_state()
+if st.session_state.selected_page not in PAGES:
+    st.session_state.selected_page = "AI Campaign Agent"
+current_page_slug = st.query_params.get("page", "")
+if isinstance(current_page_slug, list):
+    current_page_slug = current_page_slug[0] if current_page_slug else ""
+expected_page_slug = PAGE_SLUGS.get(st.session_state.selected_page, "agent")
+if current_page_slug != expected_page_slug:
+    st.query_params["page"] = expected_page_slug
+
 with st.sidebar:
     _sidebar()
 
