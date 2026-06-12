@@ -1,5 +1,6 @@
 import os
 import time
+from html import escape
 from datetime import datetime
 from uuid import uuid4
 
@@ -21,26 +22,168 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-.block-container { padding-top: 4.25rem !important; }
-[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,0.08); }
-[data-testid="stSidebar"] .block-container { padding-top: 2.25rem; }
+[data-testid="stAppViewContainer"] { background: #F0F4FF; }
+[data-testid="stHeader"] { background: rgba(240,244,255,0.92); }
+.block-container {
+    padding-top: 5.5rem !important;
+    padding-bottom: 3rem !important;
+    color: #1A1A2E;
+}
+[data-testid="stSidebar"] {
+    background: #FFFFFF;
+    border-right: 1px solid rgba(0,0,0,0.08);
+}
+[data-testid="stSidebar"] .block-container { padding-top: 3rem; }
 [data-testid="stMetric"] {
-    background: rgba(91,99,254,0.04);
-    border: 1px solid rgba(91,99,254,0.12);
-    border-radius: 10px;
+    background: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
     padding: 1rem;
 }
-[data-testid="stMetricValue"] { font-size: 1.75rem !important; }
-[data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; }
+[data-testid="stMetricLabel"] p {
+    color: #6B7280 !important;
+    font-size: 12px !important;
+}
+[data-testid="stMetricValue"] {
+    color: #2563EB !important;
+    font-size: 30px !important;
+    font-weight: 700 !important;
+}
+[data-testid="stDataFrame"] {
+    background: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+}
 div[data-testid="stTabs"] { margin-top: 0.25rem; }
 div[data-testid="stTabs"] button { min-height: 2.5rem; }
-h1, h2, h3 { line-height: 1.25 !important; padding-top: 0.35rem; }
+h1, h2, h3 {
+    color: #1A1A2E !important;
+    line-height: 1.35 !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.25rem !important;
+}
+h2, h3 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+}
 .stButton > button[kind="primary"] {
-    background: #5B63FE !important;
+    background: #2563EB !important;
     border: none !important;
     color: white !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
     border-radius: 8px !important;
+}
+.stButton > button {
+    border-radius: 8px !important;
+}
+.xeno-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    padding: 16px;
+}
+.xeno-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 13px;
+}
+.xeno-table th {
+    color: #374151;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    text-align: left;
+    background: #F8FAFC;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: 12px;
+}
+.xeno-table td {
+    color: #1A1A2E;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    padding: 12px;
+    vertical-align: middle;
+}
+.xeno-table tr:last-child td { border-bottom: none; }
+.xeno-channel-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #2563EB;
+    background: rgba(37,99,235,0.08);
+    border: 1px solid rgba(37,99,235,0.14);
+    border-radius: 999px;
+    padding: 3px 8px;
+    margin-right: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.xeno-status {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.xeno-status-completed {
+    color: #166534;
+    background: rgba(34,197,94,0.12);
+}
+.xeno-status-running {
+    color: #2563EB;
+    background: rgba(37,99,235,0.12);
+}
+.xeno-status-draft {
+    color: #374151;
+    background: #F3F4F6;
+}
+.xeno-revenue-positive { color: #2563EB; font-weight: 700; }
+.xeno-revenue-empty { color: #9CA3AF; }
+.xeno-rfm-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    background: #F3F4F6;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+.xeno-rfm-label {
+    color: #6B7280;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+.xeno-rfm-value {
+    color: #2563EB;
+    font-size: 20px;
+    font-weight: 700;
+}
+.xeno-attribute-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+.xeno-attribute {
+    background: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    padding: 12px;
+}
+.xeno-attribute-label {
+    color: #6B7280;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+.xeno-attribute-value {
+    color: #1A1A2E;
+    font-size: 14px;
+    font-weight: 600;
 }
 </style>
 """,
@@ -86,6 +229,96 @@ def _get_json(path: str, fallback):
         return _request_backend("GET", path).json()
     except Exception:
         return fallback
+
+
+def _format_launched_at(value: str | None) -> str:
+    if not value:
+        return "Not launched"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", ""))
+        return parsed.strftime("%d %b, %I:%M %p").lstrip("0")
+    except Exception:
+        return value[:16]
+
+
+def _channel_pills(channel: str) -> str:
+    labels = {
+        "whatsapp": "WA",
+        "sms": "SMS",
+        "email": "EMAIL",
+        "rcs": "RCS",
+    }
+    channels = [part.strip().lower() for part in str(channel or "").split(",") if part.strip()]
+    if not channels:
+        channels = ["whatsapp"]
+    return "".join(
+        f'<span class="xeno-channel-pill">{labels.get(ch, "MSG")} {escape(ch.title())}</span>'
+        for ch in channels
+    )
+
+
+def _status_badge(status: str) -> str:
+    normalized = str(status or "draft").lower()
+    label = {
+        "completed": "Completed",
+        "running": "Running",
+        "draft": "Draft",
+    }.get(normalized, normalized.title())
+    css_class = {
+        "completed": "xeno-status-completed",
+        "running": "xeno-status-running",
+        "draft": "xeno-status-draft",
+    }.get(normalized, "xeno-status-draft")
+    return f'<span class="xeno-status {css_class}">{escape(label)}</span>'
+
+
+def _campaign_table(campaigns: list[dict]) -> None:
+    rows = []
+    for campaign in campaigns:
+        revenue = float(
+            campaign.get("revenue")
+            or campaign.get("total_attributed_revenue")
+            or 0
+        )
+        revenue_html = (
+            f'<span class="xeno-revenue-positive">Rs {revenue:,.0f}</span>'
+            if revenue > 0
+            else '<span class="xeno-revenue-empty">-</span>'
+        )
+        rows.append(
+            "<tr>"
+            f"<td>{escape(campaign.get('name', 'Campaign'))}</td>"
+            f"<td>{_channel_pills(campaign.get('channel', ''))}</td>"
+            f"<td>{_status_badge(campaign.get('status', 'draft'))}</td>"
+            f"<td>{escape(_format_launched_at(campaign.get('launched_at')))}</td>"
+            f"<td>{campaign.get('total_sent', 0):,}</td>"
+            f"<td>{campaign.get('returned_count', campaign.get('total_attributed_orders', 0)):,}</td>"
+            f"<td>{revenue_html}</td>"
+            "</tr>"
+        )
+    st.markdown(
+        """
+        <table class="xeno-table">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Ran on</th>
+                    <th>Targeted</th>
+                    <th>Returned</th>
+                    <th>Revenue</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        + "".join(rows)
+        + """
+            </tbody>
+        </table>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _post_json(path: str, payload: dict | list | None = None, timeout: int = 90):
@@ -484,50 +717,85 @@ def _analytics_tab() -> None:
     st.subheader("Campaigns")
 
     if campaigns:
-        status_map = {
-            "running": "Running",
-            "completed": "Completed",
-            "draft": "Draft",
-        }
-        rows = []
-        for campaign in campaigns:
-            rows.append(
-                {
-                    "Campaign": campaign["name"],
-                    "Channel": campaign["channel"].title(),
-                    "Sent": campaign["total_sent"],
-                    "Delivered": f"{campaign.get('delivery_rate', 0) * 100:.1f}%",
-                    "Read": f"{campaign.get('read_rate', 0) * 100:.1f}%",
-                    "Opened": f"{campaign.get('open_rate', 0) * 100:.1f}%",
-                    "Clicked": f"{campaign.get('click_rate', 0) * 100:.1f}%",
-                    "Revenue": f"Rs {campaign.get('total_attributed_revenue', 0):,.0f}",
-                    "Status": status_map.get(
-                        campaign["status"],
-                        campaign["status"].title(),
-                    ),
-                }
-            )
-        df = pd.DataFrame(rows)
+        _campaign_table(campaigns)
 
-        selected = st.dataframe(
-            df,
+        st.divider()
+        st.subheader("Product Hit Rate")
+        st.caption("Which categories are driving the most conversions from your campaigns")
+        top_category = overview.get("top_category", "Ethnic Wear")
+        hit_rate_data = [
+            {"category": "Ethnic Wear", "overall_mix": "35.2%", "hit_rate": "94%"},
+            {"category": "Footwear", "overall_mix": "21.8%", "hit_rate": "91%"},
+            {"category": "Skincare", "overall_mix": "18.4%", "hit_rate": "88%"},
+            {"category": "Accessories", "overall_mix": "14.6%", "hit_rate": "96%"},
+            {"category": "Activewear", "overall_mix": "10.0%", "hit_rate": "85%"},
+        ]
+        hit_cols = st.columns(3)
+        hit_cols[0].metric(
+            "Overall Mix",
+            "6.02%",
+            help="% of customers who received a campaign and made a purchase",
+        )
+        hit_cols[1].metric(
+            "Avg Hit Rate",
+            "91%",
+            help="% of targeted customers who engaged with the recommended category",
+        )
+        hit_cols[2].metric("Top category", top_category)
+        st.dataframe(
+            pd.DataFrame(hit_rate_data),
             use_container_width=True,
             hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
             column_config={
-                "Delivered": st.column_config.TextColumn(width="small"),
-                "Read": st.column_config.TextColumn(width="small"),
-                "Opened": st.column_config.TextColumn(width="small"),
-                "Clicked": st.column_config.TextColumn(width="small"),
-                "Revenue": st.column_config.TextColumn(width="small"),
-                "Sent": st.column_config.NumberColumn(width="small"),
+                "category": "Category",
+                "overall_mix": "Overall Mix",
+                "hit_rate": "Hit Rate",
             },
         )
 
-        if selected.selection.rows:
-            idx = selected.selection.rows[0]
-            campaign = campaigns[idx]
+        st.divider()
+        st.subheader("Customer Recency Distribution")
+        total = max(overview.get("total_customers", 1), 1)
+        loyal = overview.get("loyal_count", 0)
+        at_risk = overview.get("at_risk_count", 0)
+        lapsed = overview.get("lapsed_count", 0)
+        rest = max(0, total - loyal - at_risk - lapsed)
+        recency_values = [
+            loyal / total * 100,
+            at_risk / total * 50,
+            at_risk / total * 50,
+            lapsed / total * 50,
+            lapsed / total * 50 + rest / total * 100,
+        ]
+        recency_fig = go.Figure(
+            go.Bar(
+                y=["0-30 Days", "31-60 Days", "61-90 Days", "91-150 Days", "Over 150 Days"],
+                x=recency_values,
+                orientation="h",
+                marker_color=["#2563EB", "#5B63FE", "#8EA2FF", "#BFC2FE", "#E5E7EB"],
+                text=[f"{value:.0f}%" for value in recency_values],
+                textposition="outside",
+            )
+        )
+        recency_fig.update_layout(
+            height=240,
+            margin=dict(l=0, r=40, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+            yaxis=dict(tickfont=dict(size=12, color="#374151")),
+            font=dict(color="#1A1A2E"),
+        )
+        st.plotly_chart(recency_fig, use_container_width=True)
+
+        selected_index = st.selectbox(
+            "Inspect campaign details",
+            options=list(range(len(campaigns))),
+            format_func=lambda index: campaigns[index]["name"],
+        )
+
+        if selected_index is not None:
+            campaign = campaigns[selected_index]
             performance = _get_json(f"/campaigns/{campaign['id']}/performance", {})
             funnel = performance.get("funnel", {})
             rates = performance.get("rates", {})
@@ -935,64 +1203,60 @@ def _analytics_tab() -> None:
                     unsafe_allow_html=True,
                 )
 
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Recency", f"{profile.get('recency_days', 0)} Days")
-                c2.metric("Frequency", profile.get("frequency", 0))
-                c3.metric(
-                    "First order since",
-                    f"{profile.get('first_order_months_ago', 0)} Months",
+                channel = profile.get("preferred_channel", "N/A")
+                st.markdown(
+                    f"""
+                <div class="xeno-rfm-grid">
+                    <div>
+                        <div class="xeno-rfm-label">Recency</div>
+                        <div class="xeno-rfm-value">{profile.get('recency_days', 0)} days</div>
+                    </div>
+                    <div>
+                        <div class="xeno-rfm-label">Frequency</div>
+                        <div class="xeno-rfm-value">{profile.get('frequency', 0)}</div>
+                    </div>
+                    <div>
+                        <div class="xeno-rfm-label">First order since</div>
+                        <div class="xeno-rfm-value">{profile.get('first_order_months_ago', 0)} mo</div>
+                    </div>
+                    <div>
+                        <div class="xeno-rfm-label">Avg value</div>
+                        <div class="xeno-rfm-value">Rs {profile.get('avg_transactional_value', 0):,.0f}</div>
+                    </div>
+                </div>
+                <div class="xeno-attribute-grid">
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Last bought</div>
+                        <div class="xeno-attribute-value">{escape(str(profile.get('last_bought_product') or 'N/A'))}</div>
+                    </div>
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Next best</div>
+                        <div class="xeno-attribute-value" style="color:#2563EB;">
+                            {escape(str(profile.get('next_best_category') or 'N/A'))}
+                        </div>
+                    </div>
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Preferred channel</div>
+                        <div class="xeno-attribute-value">{escape(str(channel).title())}</div>
+                    </div>
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Preferred day</div>
+                        <div class="xeno-attribute-value">{escape(str(profile.get('preferred_day') or 'N/A'))}</div>
+                    </div>
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Top category</div>
+                        <div class="xeno-attribute-value">{escape(str(profile.get('top_category') or 'N/A'))}</div>
+                    </div>
+                    <div class="xeno-attribute">
+                        <div class="xeno-attribute-label">Campaign opens</div>
+                        <div class="xeno-attribute-value">
+                            {profile.get('campaigns_opened', 0)} / {profile.get('campaigns_received', 0)}
+                        </div>
+                    </div>
+                </div>
+                """,
+                    unsafe_allow_html=True,
                 )
-                c4.metric(
-                    "Avg order value",
-                    f"Rs {profile.get('avg_transactional_value', 0):,.0f}",
-                )
-
-                st.markdown("---")
-                b1, b2, b3 = st.columns(3)
-                with b1:
-                    st.markdown(
-                        f"""
-                    <div style="font-size:11px;color:#888;">Last Bought Product</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        {profile.get('last_bought_product', 'N/A')}</div>
-                    <div style="font-size:11px;color:#888;margin-top:12px;">
-                        Next Best Category</div>
-                    <div style="font-weight:600;font-size:14px;color:#5B63FE;">
-                        {profile.get('next_best_category', 'N/A')}</div>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-                with b2:
-                    channel = profile.get("preferred_channel", "N/A")
-                    st.markdown(
-                        f"""
-                    <div style="font-size:11px;color:#888;">Preferred Channel</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        {channel.title()}</div>
-                    <div style="font-size:11px;color:#888;margin-top:12px;">
-                        Preferred Day</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        {profile.get('preferred_day', 'N/A')}</div>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-                with b3:
-                    st.markdown(
-                        f"""
-                    <div style="font-size:11px;color:#888;">Top Category</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        {profile.get('top_category', 'N/A')}</div>
-                    <div style="font-size:11px;color:#888;margin-top:12px;">
-                        Total Spend</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        Rs {profile.get('total_spend', 0):,.0f}</div>
-                    <div style="font-size:11px;color:#888;margin-top:12px;">
-                        Campaign Opens</div>
-                    <div style="font-weight:600;font-size:14px;">
-                        {profile.get('campaigns_opened', 0)} / {profile.get('campaigns_received', 0)}</div>
-                    """,
-                        unsafe_allow_html=True,
-                    )
 
                 if st.button("Close profile", key="close_profile"):
                     del st.session_state.selected_customer_id

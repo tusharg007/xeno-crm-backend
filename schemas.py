@@ -181,6 +181,25 @@ class CampaignRead(BaseModel):
             else 0.0
         )
 
+    @computed_field
+    @property
+    def returned_count(self) -> int:
+        return self.total_attributed_orders
+
+    @computed_field
+    @property
+    def revenue(self) -> float:
+        return self.total_attributed_revenue
+
+    @computed_field
+    @property
+    def returned_rate(self) -> float:
+        return (
+            self.returned_count / self.total_sent
+            if self.total_sent > 0
+            else 0.0
+        )
+
     model_config = ConfigDict(from_attributes=True)
 
 
