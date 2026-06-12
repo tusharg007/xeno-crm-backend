@@ -11,7 +11,7 @@ import streamlit as st
 
 
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL", "http://localhost:8000")
-BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "65"))
+BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "6"))
 
 st.set_page_config(
     page_title="Xeno - StyleHub",
@@ -419,7 +419,8 @@ def _init_session_state() -> None:
 
 def _request_backend(method: str, path: str, timeout: int = BACKEND_TIMEOUT_SECONDS, **kwargs):
     last_error = None
-    for attempt in range(2):
+    attempts = 1 if method.upper() == "GET" else 2
+    for attempt in range(attempts):
         try:
             response = requests.request(
                 method,
@@ -431,7 +432,7 @@ def _request_backend(method: str, path: str, timeout: int = BACKEND_TIMEOUT_SECO
             return response
         except Exception as exc:
             last_error = exc
-            if attempt == 0:
+            if attempt < attempts - 1:
                 time.sleep(2)
     raise last_error
 
@@ -1991,10 +1992,17 @@ _init_session_state()
 with st.sidebar:
     _sidebar()
 
-tab1, tab2, tab3 = st.tabs(["AI Campaign Agent", "Analytics", "Journeys"])
-with tab1:
+selected_page = st.radio(
+    "View",
+    ["AI Campaign Agent", "Analytics", "Journeys"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="selected_page",
+)
+
+if selected_page == "AI Campaign Agent":
     _agent_tab()
-with tab2:
+elif selected_page == "Analytics":
     _analytics_tab()
-with tab3:
+else:
     _journeys_tab()
