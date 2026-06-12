@@ -45,6 +45,7 @@ def _personalize_message(template: str, customer: Customer, db: Session) -> str:
         template.replace("{name}", customer.name)
         .replace("{city}", customer.city)
         .replace("{last_category}", _latest_order_category(customer.id, db))
+        .replace("{next_best_category}", customer.next_best_category or "")
     )
 
 

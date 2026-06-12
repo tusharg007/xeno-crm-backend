@@ -56,6 +56,21 @@ class Segment(Base):
     created_by: Mapped[str] = mapped_column(default="human")
 
 
+class Journey(Base):
+    __tablename__ = "journeys"
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str]
+    journey_type: Mapped[str]
+    status: Mapped[str] = mapped_column(default="active")
+    trigger_rules: Mapped[str]
+    message_template: Mapped[str]
+    channel: Mapped[str] = mapped_column(default="whatsapp")
+    customers_enrolled: Mapped[int] = mapped_column(default=0)
+    campaigns_triggered: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
 class Campaign(Base):
     __tablename__ = "campaigns"
 

@@ -1273,12 +1273,146 @@ def _agent_tab() -> None:
                     )
 
 
+def _journeys_tab() -> None:
+    st.subheader("Lifecycle Journeys")
+    st.caption(
+        "Automated campaigns triggered by customer behaviour - set once, run forever."
+    )
+
+    try:
+        templates = _request_backend("GET", "/journeys/templates", timeout=5).json()
+        journeys_r = _request_backend("GET", "/journeys", timeout=5).json()
+        active_journeys = journeys_r if isinstance(journeys_r, list) else []
+    except Exception as exc:
+        st.error(f"Cannot load journeys yet: {exc}")
+        templates, active_journeys = [], []
+
+    st.markdown("**Available journey types**")
+    cols = st.columns(3)
+    for index, template in enumerate(templates):
+        with cols[index % 3]:
+            st.markdown(
+                f"""
+            <div style="border:1px solid rgba(91,99,254,0.15);border-radius:10px;
+                        padding:14px;margin-bottom:12px;
+                        background:rgba(91,99,254,0.02);">
+                <div style="font-size:11px;color:#5B63FE;font-weight:700;
+                            text-transform:uppercase;margin-bottom:6px;">
+                    {template['icon']}</div>
+                <div style="font-weight:600;font-size:13px;margin-bottom:4px;">
+                    {template['name']}</div>
+                <div style="font-size:11px;color:#888;line-height:1.4;margin-bottom:10px;">
+                    {template['description']}</div>
+                <div style="font-size:11px;background:#f5f5f5;padding:6px 8px;
+                            border-radius:6px;font-family:monospace;
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    {template['default_message'][:60]}...
+                </div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Activate",
+                key=f"activate_{template['type']}",
+                use_container_width=True,
+                type="primary",
+            ):
+                try:
+                    response = _post_json(
+                        "/journeys/",
+                        {
+                            "name": template["name"],
+                            "journey_type": template["type"],
+                            "trigger_rules": template["trigger_rules"],
+                            "message_template": template["default_message"],
+                            "channel": "whatsapp",
+                        },
+                    )
+                    if response.ok:
+                        st.success(f"Journey '{template['name']}' activated.")
+                        st.rerun()
+                    else:
+                        st.error("Activation failed.")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
+    st.divider()
+    st.markdown("**Active journeys**")
+
+    if active_journeys:
+        for journey in active_journeys:
+            col_info, col_stats, col_action = st.columns([5, 3, 2])
+            with col_info:
+                status_color = "#22c55e" if journey["status"] == "active" else "#888"
+                st.markdown(
+                    f"""
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:8px;height:8px;background:{status_color};
+                                border-radius:50%;"></div>
+                    <strong>{journey['name']}</strong>
+                    <span style="font-size:11px;color:#888;">
+                        via {journey['channel'].title()}</span>
+                </div>
+                <div style="font-size:12px;color:#555;margin-top:4px;
+                            padding-left:16px;">{journey['message_template'][:80]}...</div>
+                """,
+                    unsafe_allow_html=True,
+                )
+            with col_stats:
+                st.markdown(
+                    f"""
+                <div style="font-size:12px;color:#888;margin-top:4px;">
+                    {journey['customers_enrolled']} enrolled &middot;
+                    {journey['campaigns_triggered']} campaigns triggered
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+            with col_action:
+                if st.button(
+                    "Run now",
+                    key=f"trigger_{journey['id']}",
+                    use_container_width=True,
+                ):
+                    try:
+                        response = _post_json(
+                            f"/journeys/{journey['id']}/trigger",
+                            timeout=15,
+                        )
+                        if response.ok:
+                            data = response.json()
+                            st.success(f"Triggered to {data.get('queued', 0)} customers.")
+                            st.rerun()
+                        else:
+                            st.error("Trigger failed.")
+                    except Exception as exc:
+                        st.error(str(exc))
+                action_label = "Pause" if journey["status"] == "active" else "Resume"
+                if st.button(
+                    action_label,
+                    key=f"pause_{journey['id']}",
+                    use_container_width=True,
+                ):
+                    try:
+                        response = _post_json(f"/journeys/{journey['id']}/pause")
+                        if response.ok:
+                            st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+            st.divider()
+    else:
+        st.info("No journeys yet. Activate one from the templates above.")
+
+
 _init_session_state()
 with st.sidebar:
     _sidebar()
 
-tab1, tab2 = st.tabs(["🤖 AI Campaign Agent", "📊 Analytics"])
+tab1, tab2, tab3 = st.tabs(["AI Campaign Agent", "Analytics", "Journeys"])
 with tab1:
     _agent_tab()
 with tab2:
     _analytics_tab()
+with tab3:
+    _journeys_tab()

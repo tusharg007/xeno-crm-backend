@@ -18,6 +18,11 @@ def execute_segment_filter(filter_rules: dict, db: Session) -> list[str]:
     query = select(Customer.id)
     joined_orders = False
 
+    if "customer_ids" in filter_rules:
+        ids = filter_rules["customer_ids"]
+        if isinstance(ids, list):
+            query = query.where(Customer.id.in_(ids))
+
     if "category" in filter_rules:
         query = query.join(Order, Order.customer_id == Customer.id)
         joined_orders = True

@@ -10,6 +10,7 @@ from database import create_tables, get_db
 from models import Customer
 from routers.campaigns import router as campaigns_router
 from routers.customers import router as customers_router
+from routers.journeys import router as journeys_router
 from routers.receipts import router as receipts_router
 from routers.segments import router as segments_router
 from schemas import ChatRequest, ChatResponse
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(customers_router, prefix="/customers", tags=["customers"])
 app.include_router(segments_router, prefix="/segments", tags=["segments"])
 app.include_router(campaigns_router, prefix="/campaigns", tags=["campaigns"])
+app.include_router(journeys_router, prefix="/journeys", tags=["journeys"])
 app.include_router(receipts_router, prefix="", tags=["receipts"])
 
 

@@ -93,6 +93,40 @@ class SegmentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class JourneyCreate(BaseModel):
+    name: str
+    journey_type: str
+    trigger_rules: dict[str, Any]
+    message_template: str
+    channel: str = "whatsapp"
+
+
+class JourneyRead(BaseModel):
+    id: str
+    name: str
+    journey_type: str
+    status: str
+    trigger_rules: dict[str, Any]
+    message_template: str
+    channel: str
+    customers_enrolled: int
+    campaigns_triggered: int
+    created_at: datetime
+
+    @field_validator("trigger_rules", mode="before")
+    @classmethod
+    def parse_trigger_rules(cls, value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        raise ValueError("trigger_rules must be a JSON object")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CampaignCreate(BaseModel):
     name: str
     segment_id: str
