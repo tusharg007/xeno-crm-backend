@@ -11,7 +11,7 @@ import streamlit as st
 
 
 CRM_BACKEND_URL = os.getenv("CRM_BACKEND_URL", "http://localhost:8000")
-BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "6"))
+BACKEND_TIMEOUT_SECONDS = int(os.getenv("BACKEND_TIMEOUT_SECONDS", "4"))
 
 st.set_page_config(
     page_title="Xeno - StyleHub",
@@ -22,14 +22,16 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-[data-testid="stAppViewContainer"] { background: #EEF4FF; color: #111827; }
+[data-testid="stAppViewContainer"] { background: #F6F9FF; color: #111827; }
 [data-testid="stHeader"] { background: transparent; }
 [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer {
     visibility: hidden;
 }
 .block-container {
-    max-width: 1240px;
-    padding-top: 1.75rem !important;
+    max-width: none;
+    padding-top: 1.2rem !important;
+    padding-left: 1.35rem !important;
+    padding-right: 1.35rem !important;
     padding-bottom: 3rem !important;
     color: #111827;
 }
@@ -37,7 +39,11 @@ st.markdown(
     background: #FFFFFF;
     border-right: 1px solid rgba(17,24,39,0.14);
 }
-[data-testid="stSidebar"] .block-container { padding-top: 2rem; }
+[data-testid="stSidebar"] .block-container {
+    padding-top: 1.75rem;
+    padding-left: 1.2rem !important;
+    padding-right: 1.2rem !important;
+}
 [data-testid="stMetric"] {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
@@ -91,10 +97,11 @@ h2, h3 {
 }
 .stButton > button[kind="primary"] {
     background: #2563EB !important;
-    border: none !important;
+    border: 1px solid #2563EB !important;
     color: white !important;
     font-weight: 600 !important;
     border-radius: 8px !important;
+    box-shadow: 0 8px 18px rgba(37,99,235,0.18);
 }
 .stButton > button {
     border-radius: 8px !important;
@@ -102,6 +109,52 @@ h2, h3 {
     color: #111827 !important;
     border: 1px solid rgba(17,24,39,0.22) !important;
     font-weight: 700 !important;
+    transition: background 140ms ease, border-color 140ms ease,
+        color 140ms ease, box-shadow 140ms ease, transform 120ms ease;
+    min-height: 2.55rem;
+}
+.stButton > button:hover {
+    background: #EAF1FF !important;
+    border-color: #2563EB !important;
+    color: #111827 !important;
+    box-shadow: 0 8px 18px rgba(37,99,235,0.13);
+    transform: translateY(-1px);
+}
+.stButton > button:active {
+    background: #2563EB !important;
+    border-color: #2563EB !important;
+    color: #FFFFFF !important;
+    transform: translateY(0);
+}
+.stButton > button[kind="primary"]:hover {
+    background: #1D4ED8 !important;
+    border-color: #1D4ED8 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 10px 22px rgba(37,99,235,0.22);
+}
+.stButton > button:disabled,
+.stButton > button:disabled:hover {
+    background: #F3F4F6 !important;
+    border-color: #D1D5DB !important;
+    color: #9CA3AF !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+.xeno-nav-spacer {
+    height: 0.45rem;
+}
+.xeno-tab-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(37,99,235,0.16);
+    border-radius: 12px;
+    padding: 1rem 1rem 1.2rem;
+    box-shadow: 0 12px 28px rgba(37,99,235,0.07);
+}
+.xeno-soft-panel {
+    background: #FFFFFF;
+    border: 1px solid rgba(37,99,235,0.18);
+    border-radius: 12px;
+    padding: 1rem;
 }
 .stChatInput {
     background: #FFFFFF !important;
@@ -411,6 +464,7 @@ def _init_session_state() -> None:
         "awaiting_approval": False,
         "pending_segment_id": None,
         "journey_notice": None,
+        "selected_page": "AI Campaign Agent",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -437,11 +491,20 @@ def _request_backend(method: str, path: str, timeout: int = BACKEND_TIMEOUT_SECO
     raise last_error
 
 
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_get_json(path: str, timeout: int):
+    return _request_backend("GET", path, timeout=timeout).json()
+
+
 def _get_json(path: str, fallback):
     try:
-        return _request_backend("GET", path).json()
+        return _cached_get_json(path, BACKEND_TIMEOUT_SECONDS)
     except Exception:
         return fallback
+
+
+def _clear_backend_cache() -> None:
+    st.cache_data.clear()
 
 
 def _format_launched_at(value: str | None) -> str:
@@ -1702,6 +1765,7 @@ def _sidebar() -> None:
                 st.session_state.campaign_draft = None
                 st.session_state.awaiting_approval = False
                 st.success("Demo reset.")
+                _clear_backend_cache()
                 st.rerun()
             else:
                 st.error("Reset failed.")
@@ -1852,6 +1916,7 @@ def _agent_tab() -> None:
                                     )
                                     st.session_state.campaign_draft = None
                                     st.session_state.awaiting_approval = False
+                                    _clear_backend_cache()
                                 else:
                                     st.error("Campaign launch failed.")
                             else:
@@ -1867,50 +1932,71 @@ def _agent_tab() -> None:
                     )
 
 
+def _render_navigation() -> None:
+    nav_cols = st.columns([1.2, 0.9, 0.9, 5.5])
+    pages = ["AI Campaign Agent", "Analytics", "Journeys"]
+    for col, page in zip(nav_cols[:3], pages):
+        with col:
+            if st.button(
+                page,
+                key=f"nav_{page}",
+                type="primary" if st.session_state.selected_page == page else "secondary",
+                use_container_width=True,
+            ):
+                st.session_state.selected_page = page
+                st.rerun()
+    st.markdown('<div class="xeno-nav-spacer"></div>', unsafe_allow_html=True)
+
+
 def _journeys_tab() -> None:
-    try:
-        st.markdown("### Lifecycle journeys")
-        st.caption(
-            "Automated campaigns triggered by customer behaviour. "
-            "Configure once, then run when eligible customers appear."
-        )
+    st.markdown("### Lifecycle journeys")
+    st.caption(
+        "Automated campaigns triggered by customer behaviour. "
+        "Configure once, then run when eligible customers appear."
+    )
 
-        templates = _request_backend("GET", "/journeys/templates", timeout=5).json()
-        journeys_r = _request_backend("GET", "/journeys", timeout=5).json()
-        journeys = journeys_r if isinstance(journeys_r, list) else []
-        templates = templates if isinstance(templates, list) else []
+    templates = _get_json("/journeys/templates", [])
+    journeys_r = _get_json("/journeys", [])
+    journeys = journeys_r if isinstance(journeys_r, list) else []
+    templates = templates if isinstance(templates, list) else []
 
-        notice = st.session_state.pop("journey_notice", None)
-        if notice:
-            st.success(notice)
+    notice = st.session_state.pop("journey_notice", None)
+    if notice:
+        st.success(notice)
 
-        active_count = sum(1 for journey in journeys if journey.get("status") == "active")
-        paused_count = sum(1 for journey in journeys if journey.get("status") == "paused")
-        total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in journeys)
-        summary_cols = st.columns(3)
-        summary_cols[0].metric("Active journeys", active_count)
-        summary_cols[1].metric("Paused journeys", paused_count)
-        summary_cols[2].metric("Campaigns triggered", total_triggered)
+    active_count = sum(1 for journey in journeys if journey.get("status") == "active")
+    paused_count = sum(1 for journey in journeys if journey.get("status") == "paused")
+    total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in journeys)
+    summary_cols = st.columns(3, gap="medium")
+    summary_cols[0].metric("Active journeys", active_count)
+    summary_cols[1].metric("Paused journeys", paused_count)
+    summary_cols[2].metric("Campaigns triggered", total_triggered)
 
-        st.divider()
-        st.subheader("Active journeys")
-        if journeys:
-            for journey in journeys:
-                status = str(journey.get("status", "active"))
-                journey_id = str(journey.get("id", ""))
-                st.markdown(f"**{journey.get('name', 'Journey')}**")
+    st.markdown("")
+    st.subheader("Active journey control center")
+    st.caption("Run, pause, or resume lifecycle automations without losing the template list.")
+    if journeys:
+        for journey in journeys:
+            status = str(journey.get("status", "active"))
+            journey_id = str(journey.get("id", ""))
+            status_label = "Active" if status == "active" else "Paused"
+            channel = str(journey.get("channel", "whatsapp")).title()
+            with st.container(border=True):
+                title_col, status_col = st.columns([4, 1])
+                title_col.markdown(f"**{journey.get('name', 'Journey')}**")
+                status_col.markdown(f"**{status_label}**")
                 st.caption(
-                    f"{status.title()} | {str(journey.get('channel', 'whatsapp')).title()} | "
-                    f"{journey.get('customers_enrolled', 0)} enrolled | "
+                    f"{channel} | {journey.get('customers_enrolled', 0)} enrolled | "
                     f"{journey.get('campaigns_triggered', 0)} campaigns triggered"
                 )
-                st.write(str(journey.get("message_template", ""))[:140] + "...")
+                st.write(str(journey.get("message_template", ""))[:160])
 
-                run_col, toggle_col, hint_col = st.columns([1, 1, 4])
+                run_col, toggle_col, hint_col = st.columns([1, 1, 3], gap="medium")
                 with run_col:
                     if st.button(
                         "Run now",
                         key=f"trigger_{journey_id}",
+                        type="primary",
                         disabled=status != "active",
                         use_container_width=True,
                     ):
@@ -1926,6 +2012,7 @@ def _journeys_tab() -> None:
                                 else f"Journey matched {matched} customers but queued 0: "
                                 f"{reason or 'no eligible customers'}."
                             )
+                            _clear_backend_cache()
                             st.rerun()
                         st.error("Trigger failed.")
                 with toggle_col:
@@ -1935,6 +2022,7 @@ def _journeys_tab() -> None:
                         if response.ok:
                             next_state = "paused" if action_label == "Pause" else "active"
                             st.session_state.journey_notice = f"Journey is now {next_state}."
+                            _clear_backend_cache()
                             st.rerun()
                         st.error("Status update failed.")
                 with hint_col:
@@ -1942,29 +2030,42 @@ def _journeys_tab() -> None:
                         "Resume before running." if status != "active"
                         else "Run now creates a campaign from eligible customers."
                     )
-                st.divider()
-        else:
-            st.info("No journeys yet. Activate a template below.")
+    else:
+        st.info("No journeys yet. Activate one from the templates below.")
 
-        st.subheader("Journey templates")
-        active_by_type: dict[str, int] = {}
-        for journey in journeys:
-            journey_type = str(journey.get("journey_type", ""))
-            active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
+    st.divider()
+    st.subheader("Journey templates")
+    st.caption("Templates always stay visible. Activate one or add another copy.")
+    if not templates:
+        st.warning("Journey templates could not be loaded yet. Refresh after the backend wakes up.")
+        return
 
-        cols = st.columns(2)
-        for index, template in enumerate(templates):
-            template_type = str(template.get("type", f"template_{index}"))
-            existing_count = active_by_type.get(template_type, 0)
-            with cols[index % 2]:
+    active_by_type: dict[str, int] = {}
+    for journey in journeys:
+        journey_type = str(journey.get("journey_type", ""))
+        active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
+
+    cols = st.columns(3, gap="medium")
+    for index, template in enumerate(templates):
+        template_type = str(template.get("type", f"template_{index}"))
+        existing_count = active_by_type.get(template_type, 0)
+        with cols[index % 3]:
+            with st.container(border=True):
                 st.markdown(f"**{template.get('name', 'Journey template')}**")
                 if existing_count:
                     st.caption(f"{existing_count} configured")
-                st.caption(str(template.get("description", "")))
-                st.write(str(template.get("default_message", ""))[:120] + "...")
+                else:
+                    st.caption("Ready to activate")
+                st.write(str(template.get("description", "")))
+                st.caption(str(template.get("default_message", ""))[:140])
 
                 button_label = "Activate another" if existing_count else "Activate"
-                if st.button(button_label, key=f"activate_{template_type}", use_container_width=True):
+                if st.button(
+                    button_label,
+                    key=f"activate_{template_type}",
+                    type="primary",
+                    use_container_width=True,
+                ):
                     response = _post_json(
                         "/journeys/",
                         {
@@ -1979,30 +2080,20 @@ def _journeys_tab() -> None:
                         st.session_state.journey_notice = (
                             f"Journey '{template.get('name', 'Journey')}' activated."
                         )
+                        _clear_backend_cache()
                         st.rerun()
                     st.error("Activation failed.")
-                st.divider()
-    except Exception as exc:
-        if exc.__class__.__name__ in {"RerunException", "StopException"}:
-            raise
-        st.error(f"Journeys could not load: {exc}")
 
 
 _init_session_state()
 with st.sidebar:
     _sidebar()
 
-selected_page = st.radio(
-    "View",
-    ["AI Campaign Agent", "Analytics", "Journeys"],
-    horizontal=True,
-    label_visibility="collapsed",
-    key="selected_page",
-)
+_render_navigation()
 
-if selected_page == "AI Campaign Agent":
+if st.session_state.selected_page == "AI Campaign Agent":
     _agent_tab()
-elif selected_page == "Analytics":
+elif st.session_state.selected_page == "Analytics":
     _analytics_tab()
 else:
     _journeys_tab()
