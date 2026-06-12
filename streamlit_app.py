@@ -28,8 +28,8 @@ st.markdown(
     visibility: hidden;
 }
 .block-container {
-    max-width: 1280px;
-    padding-top: 2.25rem !important;
+    max-width: 1240px;
+    padding-top: 1.75rem !important;
     padding-bottom: 3rem !important;
     color: #111827;
 }
@@ -37,7 +37,7 @@ st.markdown(
     background: #FFFFFF;
     border-right: 1px solid rgba(17,24,39,0.14);
 }
-[data-testid="stSidebar"] .block-container { padding-top: 2.25rem; }
+[data-testid="stSidebar"] .block-container { padding-top: 2rem; }
 [data-testid="stMetric"] {
     background: #FFFFFF;
     border: 1px solid rgba(37,99,235,0.18);
@@ -61,20 +61,9 @@ st.markdown(
     border-radius: 8px;
     overflow: hidden;
 }
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background: #FFFFFF !important;
-    border: 1px solid rgba(37,99,235,0.18) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 20px rgba(37,99,235,0.07) !important;
-}
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] p,
-[data-testid="stVerticalBlockBorderWrapper"] label,
-[data-testid="stVerticalBlockBorderWrapper"] span {
-    color: #111827;
-}
 div[data-testid="stTabs"] { margin-top: 0.5rem; }
 div[data-testid="stTabs"] button {
-    min-height: 2.35rem;
+    min-height: 2.2rem;
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
 }
@@ -83,7 +72,7 @@ div[data-testid="stTabs"] button p {
     font-weight: 600 !important;
 }
 div[data-testid="stTabs"] [role="tabpanel"] {
-    padding-top: 1rem;
+    padding-top: 0.75rem;
 }
 h1, h2, h3 {
     color: #111827 !important;
@@ -138,7 +127,7 @@ h2, h3 {
     border: 1px solid rgba(37,99,235,0.18);
     border-radius: 8px;
     padding: 16px;
-    margin: 10px 0 16px;
+    margin: 8px 0 14px;
     box-shadow: 0 10px 24px rgba(37,99,235,0.07);
 }
 .xeno-section-header {
@@ -424,7 +413,7 @@ h2, h3 {
     }
 }
 @media (max-width: 560px) {
-    .block-container { padding-top: 2.75rem !important; }
+    .block-container { padding-top: 2rem !important; }
     .xeno-kpi-grid,
     .xeno-rfm-grid,
     .xeno-attribute-grid,
@@ -725,10 +714,10 @@ def _resolve_segment_id(campaign_draft: dict | None) -> str | None:
 def _render_suggestions() -> None:
     st.markdown(
         """
-    <div style="text-align:center;padding:2rem 1rem 1.5rem;">
+    <div style="text-align:center;padding:1rem 1rem 1rem;">
         <div style="font-size:32px;margin-bottom:8px;">&#128153;</div>
         <div style="font-size:18px;font-weight:600;margin-bottom:6px;">Hi, I'm Xeno</div>
-        <div style="font-size:14px;color:#374151;font-weight:500;margin-bottom:1.5rem;max-width:320px;margin-left:auto;margin-right:auto;">
+        <div style="font-size:14px;color:#374151;font-weight:500;margin-bottom:1rem;max-width:320px;margin-left:auto;margin-right:auto;">
             Your AI campaign manager for StyleHub.
             Describe who you want to reach; I'll handle the rest.
         </div>
@@ -1903,16 +1892,8 @@ def _agent_tab() -> None:
 
 
 def _journeys_tab() -> None:
-    st.markdown(
-        """
-        <div class="xeno-page-kicker">Automation</div>
-        <div class="xeno-page-title">Lifecycle journeys</div>
-        <div class="xeno-page-subtitle">
-            Automated campaigns triggered by customer behaviour - set once, run forever.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("### Lifecycle journeys")
+    st.caption("Automated campaigns triggered by customer behaviour. Configure once, run whenever eligible customers appear.")
 
     try:
         templates = _request_backend("GET", "/journeys/templates", timeout=5).json()
@@ -1929,159 +1910,107 @@ def _journeys_tab() -> None:
     active_count = sum(1 for journey in active_journeys if journey.get("status") == "active")
     paused_count = sum(1 for journey in active_journeys if journey.get("status") == "paused")
     total_triggered = sum(int(journey.get("campaigns_triggered", 0)) for journey in active_journeys)
-    st.markdown(
-        f"""
-        <div class="xeno-journey-summary">
-            <div class="xeno-journey-summary-card">
-                <div class="xeno-journey-summary-label">Active journeys</div>
-                <div class="xeno-journey-summary-value">{active_count}</div>
-            </div>
-            <div class="xeno-journey-summary-card">
-                <div class="xeno-journey-summary-label">Paused journeys</div>
-                <div class="xeno-journey-summary-value">{paused_count}</div>
-            </div>
-            <div class="xeno-journey-summary-card">
-                <div class="xeno-journey-summary-label">Campaigns triggered</div>
-                <div class="xeno-journey-summary-value">{total_triggered}</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    metric_cols = st.columns(3)
+    metric_cols[0].metric("Active journeys", active_count)
+    metric_cols[1].metric("Paused journeys", paused_count)
+    metric_cols[2].metric("Campaigns triggered", total_triggered)
 
-    _section_header(
-        "Active journey control center",
-        "Run, pause, or resume lifecycle automations without losing the template list.",
-    )
+    st.subheader("Active journeys")
+    st.caption("Run, pause, or resume lifecycle automations. Templates remain available below.")
 
     if active_journeys:
         for journey in active_journeys:
             status = journey.get("status", "active")
-            status_color = "#22c55e" if status == "active" else "#374151"
-            status_label = status.title()
-            st.markdown(
-                f"""
-            <div class="xeno-active-journey">
-                <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;">
-                    <div>
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-                            <span style="width:8px;height:8px;background:{status_color};
-                                         border-radius:50%;display:inline-block;"></span>
-                            <span style="font-size:14px;font-weight:700;color:#111827;">
-                                {escape(str(journey['name']))}</span>
-                            <span class="xeno-channel-pill">
-                                <span class="xeno-channel-icon">W</span>{escape(str(journey['channel']).title())}
-                            </span>
-                            <span style="border-radius:999px;padding:3px 9px;font-size:11px;
-                                         font-weight:700;color:{status_color};
-                                         background:{status_color}22;">{status_label}</span>
-                        </div>
-                        <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;">
-                            {escape(str(journey['message_template'])[:100])}...
-                        </div>
-                    </div>
-                    <div style="font-size:12px;color:#111827;font-weight:600;text-align:right;min-width:180px;">
-                        <strong style="color:#2563EB;">{journey['customers_enrolled']}</strong> enrolled<br>
-                        <strong style="color:#2563EB;">{journey['campaigns_triggered']}</strong> campaigns triggered
-                    </div>
-                </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-            col_run, col_toggle, col_hint = st.columns([1.2, 1.2, 4.6])
-            with col_run:
-                if st.button(
-                    "Run now",
-                    key=f"trigger_{journey['id']}",
-                    use_container_width=True,
-                    disabled=status != "active",
-                ):
-                    try:
-                        response = _post_json(
-                            f"/journeys/{journey['id']}/trigger",
-                            timeout=15,
-                        )
-                        if response.ok:
-                            data = response.json()
-                            queued = data.get("queued", 0)
-                            matched = data.get("matched", 0)
-                            reason = data.get("reason")
-                            if queued:
-                                st.session_state.journey_notice = (
-                                    f"Journey '{journey['name']}' created a campaign "
-                                    f"for {queued} eligible customers."
-                                )
-                            else:
-                                st.session_state.journey_notice = (
-                                    f"Journey '{journey['name']}' matched {matched} customers "
-                                    f"but queued 0. Reason: {reason or 'no eligible customers'}."
-                                )
-                            st.rerun()
-                        else:
-                            st.error("Trigger failed.")
-                    except Exception as exc:
-                        st.error(str(exc))
-            with col_toggle:
-                action_label = "Pause" if journey["status"] == "active" else "Resume"
-                if st.button(
-                    action_label,
-                    key=f"pause_{journey['id']}",
-                    use_container_width=True,
-                ):
-                    try:
-                        response = _post_json(f"/journeys/{journey['id']}/pause")
-                        if response.ok:
-                            next_state = "paused" if action_label == "Pause" else "active"
-                            st.session_state.journey_notice = (
-                                f"Journey '{journey['name']}' is now {next_state}."
+            with st.container(border=True):
+                info_col, stat_col = st.columns([4, 1.4])
+                with info_col:
+                    st.markdown(f"**{journey.get('name', 'Journey')}**")
+                    st.caption(
+                        f"{status.title()} on {str(journey.get('channel', 'whatsapp')).title()} | "
+                        f"{str(journey.get('message_template', ''))[:110]}..."
+                    )
+                with stat_col:
+                    st.metric("Enrolled", journey.get("customers_enrolled", 0))
+                    st.metric("Triggered", journey.get("campaigns_triggered", 0))
+
+                run_col, toggle_col, hint_col = st.columns([1.1, 1.1, 3.8])
+                with run_col:
+                    if st.button(
+                        "Run now",
+                        key=f"trigger_{journey['id']}",
+                        use_container_width=True,
+                        disabled=status != "active",
+                    ):
+                        try:
+                            response = _post_json(
+                                f"/journeys/{journey['id']}/trigger",
+                                timeout=15,
                             )
-                            st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
-            with col_hint:
-                if status != "active":
-                    st.caption("Resume this journey before running it.")
-                else:
-                    st.caption("Run now creates a campaign from current eligible customers.")
-            st.divider()
+                            if response.ok:
+                                data = response.json()
+                                queued = data.get("queued", 0)
+                                matched = data.get("matched", 0)
+                                reason = data.get("reason")
+                                if queued:
+                                    st.session_state.journey_notice = (
+                                        f"Journey '{journey['name']}' created a campaign "
+                                        f"for {queued} eligible customers."
+                                    )
+                                else:
+                                    st.session_state.journey_notice = (
+                                        f"Journey '{journey['name']}' matched {matched} customers "
+                                        f"but queued 0. Reason: {reason or 'no eligible customers'}."
+                                    )
+                                st.rerun()
+                            else:
+                                st.error("Trigger failed.")
+                        except Exception as exc:
+                            st.error(str(exc))
+                with toggle_col:
+                    action_label = "Pause" if status == "active" else "Resume"
+                    if st.button(
+                        action_label,
+                        key=f"pause_{journey['id']}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            response = _post_json(f"/journeys/{journey['id']}/pause")
+                            if response.ok:
+                                next_state = "paused" if action_label == "Pause" else "active"
+                                st.session_state.journey_notice = (
+                                    f"Journey '{journey['name']}' is now {next_state}."
+                                )
+                                st.rerun()
+                        except Exception as exc:
+                            st.error(str(exc))
+                with hint_col:
+                    st.caption(
+                        "Resume this journey before running it."
+                        if status != "active"
+                        else "Run now creates a campaign from current eligible customers."
+                    )
     else:
         st.info("No journeys yet. Activate one from the templates below.")
 
-    st.divider()
-    _section_header("Journey templates", "Templates always stay visible. Activate one or add another copy.")
+    st.subheader("Journey templates")
+    st.caption("Pick a lifecycle playbook. Existing templates stay visible and can be activated again.")
     active_by_type: dict[str, int] = {}
     for journey in active_journeys:
         journey_type = str(journey.get("journey_type", ""))
         active_by_type[journey_type] = active_by_type.get(journey_type, 0) + 1
 
-    cols = st.columns(3)
+    cols = st.columns(2)
     for index, template in enumerate(templates):
         template_type = str(template["type"])
         existing_count = active_by_type.get(template_type, 0)
-        with cols[index % 3]:
-            state_badge = (
-                f'<div class="xeno-template-state">{existing_count} configured</div>'
-                if existing_count
-                else ""
-            )
-            st.markdown(
-                f"""
-            <div class="xeno-journey-card">
-                {state_badge}
-                <div class="xeno-journey-icon">{escape(str(template['icon'])[:1])}</div>
-                <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:5px;">
-                    {escape(str(template['name']))}</div>
-                <div style="font-size:12px;color:#374151;font-weight:500;line-height:1.45;margin-bottom:12px;">
-                    {escape(str(template['description']))}</div>
-                <div style="font-size:12px;background:#EAF1FF;padding:8px 10px;
-                            border-radius:8px;color:#111827;font-weight:500;line-height:1.35;">
-                    {escape(str(template['default_message'])[:78])}...
-                </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
+        with cols[index % 2]:
+            with st.container(border=True):
+                if existing_count:
+                    st.caption(f"{existing_count} configured")
+                st.markdown(f"**{template['name']}**")
+                st.caption(str(template["description"]))
+                st.info(str(template["default_message"])[:120] + "...")
+
             button_label = "Activate another" if existing_count else "Activate"
             if st.button(
                 button_label,
