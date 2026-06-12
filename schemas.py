@@ -26,6 +26,11 @@ class CustomerRead(BaseModel):
     total_orders: int
     total_spend: float
     last_order_date: Optional[datetime]
+    preferred_channel: Optional[str] = None
+    preferred_day: Optional[str] = None
+    next_best_category: Optional[str] = None
+    rfm_persona: Optional[str] = None
+    first_order_date: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

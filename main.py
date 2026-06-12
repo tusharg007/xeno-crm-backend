@@ -55,6 +55,9 @@ async def startup_event():
             seed_data.run_seed(db)
             customer_count = db.query(Customer).count()
             order_count = db.query(Order).count()
+        else:
+            seed_data.ensure_customer_profiles(db)
+            db.commit()
         logger.info(f"Xeno CRM ready. {customer_count} customers, {order_count} orders.")
     finally:
         db.close()

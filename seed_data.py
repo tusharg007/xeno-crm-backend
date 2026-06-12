@@ -71,6 +71,14 @@ AMOUNT_RANGES = {
     "Activewear": (500, 4000),
 }
 
+NEXT_BEST_CATEGORY = {
+    "Ethnic Wear": "Accessories",
+    "Footwear": "Activewear",
+    "Skincare": "Accessories",
+    "Accessories": "Ethnic Wear",
+    "Activewear": "Footwear",
+}
+
 CITY_COUNTS = {
     "Mumbai": 40,
     "Delhi": 40,
@@ -250,11 +258,71 @@ def _update_customer_aggregates(customers: list[Customer], orders: list[Order]) 
     for order in orders:
         orders_by_customer[order.customer_id].append(order)
 
-    for customer in customers:
+    reference = datetime.utcnow()
+    for index, customer in enumerate(customers):
         customer_orders = orders_by_customer[customer.id]
         customer.total_orders = len(customer_orders)
         customer.total_spend = round(sum(order.amount for order in customer_orders), 2)
         customer.last_order_date = max(order.order_date for order in customer_orders)
+        customer.first_order_date = min(order.order_date for order in customer_orders)
+
+        if customer.gender == "F":
+            customer.preferred_channel = random.choices(
+                ["whatsapp", "email", "sms"],
+                weights=[60, 25, 15],
+                k=1,
+            )[0]
+        else:
+            customer.preferred_channel = random.choices(
+                ["whatsapp", "sms", "email"],
+                weights=[45, 30, 25],
+                k=1,
+            )[0]
+
+        weekend_orders = sum(1 for order in customer_orders if order.order_date.weekday() >= 5)
+        customer.preferred_day = (
+            "Weekends" if weekend_orders / len(customer_orders) > 0.6 else "Weekdays"
+        )
+
+        category_counts: dict[str, int] = defaultdict(int)
+        for order in customer_orders:
+            category_counts[order.category] += 1
+        top_category = max(category_counts.items(), key=lambda item: item[1])[0]
+        customer.next_best_category = NEXT_BEST_CATEGORY[top_category]
+
+        recency_days = (reference - customer.last_order_date).days
+        if index < 40:
+            customer.rfm_persona = (
+                "Champion" if customer.total_spend > 15000 else "Loyal"
+            )
+        elif index < 100:
+            customer.rfm_persona = "At Risk"
+        elif index < 160:
+            customer.rfm_persona = (
+                "Solo Buyer" if customer.total_orders == 1 else "Lapsed"
+            )
+        else:
+            customer.rfm_persona = "New" if recency_days <= 90 else "Solo Buyer"
+
+
+def ensure_customer_profiles(db: Session) -> None:
+    """Backfill rich customer profile fields for an existing database."""
+    missing_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(Customer)
+            .where(Customer.rfm_persona.is_(None))
+        )
+        or 0
+    )
+    if missing_count == 0:
+        return
+
+    customers = db.scalars(select(Customer).order_by(Customer.created_at)).all()
+    orders = db.scalars(select(Order)).all()
+    if customers and orders:
+        _update_customer_aggregates(customers, orders)
+        db.flush()
 
 
 def run_seed(db: Session = None) -> int:
@@ -286,6 +354,7 @@ def run_seed(db: Session = None) -> int:
             order_count = len(orders)
         else:
             order_count = db.scalar(select(func.count()).select_from(Order)) or 0
+            ensure_customer_profiles(db)
 
         db.commit()
         print(f"Done. 200 customers, {order_count} orders seeded.")

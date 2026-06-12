@@ -22,6 +22,11 @@ class Customer(Base):
     total_orders: Mapped[int] = mapped_column(default=0)
     total_spend: Mapped[float] = mapped_column(default=0.0)
     last_order_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    preferred_channel: Mapped[Optional[str]] = mapped_column(nullable=True)
+    preferred_day: Mapped[Optional[str]] = mapped_column(nullable=True)
+    next_best_category: Mapped[Optional[str]] = mapped_column(nullable=True)
+    rfm_persona: Mapped[Optional[str]] = mapped_column(nullable=True)
+    first_order_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     orders: Mapped[List["Order"]] = relationship(back_populates="customer")
     messages: Mapped[List["Message"]] = relationship(back_populates="customer")
 

@@ -1,3 +1,4 @@
+import random
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,7 @@ def _recalculate_customer_aggregates(customer_id: str, db: Session) -> None:
             func.count(Order.id),
             func.coalesce(func.sum(Order.amount), 0.0),
             func.max(Order.order_date),
+            func.min(Order.order_date),
         ).where(Order.customer_id == customer_id)
     ).one()
     customer = db.get(Customer, customer_id)
@@ -27,6 +29,61 @@ def _recalculate_customer_aggregates(customer_id: str, db: Session) -> None:
     customer.total_orders = aggregates[0]
     customer.total_spend = round(float(aggregates[1] or 0.0), 2)
     customer.last_order_date = aggregates[2]
+    customer.first_order_date = aggregates[3]
+
+    orders = db.scalars(
+        select(Order).where(Order.customer_id == customer_id).order_by(Order.order_date)
+    ).all()
+    if not orders:
+        return
+
+    if customer.gender == "F":
+        customer.preferred_channel = random.choices(
+            ["whatsapp", "email", "sms"],
+            weights=[60, 25, 15],
+            k=1,
+        )[0]
+    else:
+        customer.preferred_channel = random.choices(
+            ["whatsapp", "sms", "email"],
+            weights=[45, 30, 25],
+            k=1,
+        )[0]
+    weekend_orders = sum(1 for order in orders if order.order_date.weekday() >= 5)
+    customer.preferred_day = "Weekends" if weekend_orders / len(orders) > 0.6 else "Weekdays"
+
+    top_category = _top_category(customer_id, db)
+    next_best_lookup = {
+        "Ethnic Wear": "Accessories",
+        "Footwear": "Activewear",
+        "Skincare": "Accessories",
+        "Accessories": "Ethnic Wear",
+        "Activewear": "Footwear",
+    }
+    customer.next_best_category = next_best_lookup.get(top_category)
+
+    recency_days = (datetime.utcnow() - customer.last_order_date).days
+    if customer.total_orders <= 1:
+        customer.rfm_persona = "New" if recency_days <= 90 else "Solo Buyer"
+    elif recency_days <= 30 and customer.total_spend > 15000:
+        customer.rfm_persona = "Champion"
+    elif recency_days <= 60:
+        customer.rfm_persona = "Loyal"
+    elif recency_days <= 120:
+        customer.rfm_persona = "At Risk"
+    else:
+        customer.rfm_persona = "Lapsed"
+
+
+def _top_category(customer_id: str, db: Session) -> str:
+    row = db.execute(
+        select(Order.category, func.count(Order.id).label("count"))
+        .where(Order.customer_id == customer_id)
+        .group_by(Order.category)
+        .order_by(desc("count"))
+        .limit(1)
+    ).first()
+    return row[0] if row else "N/A"
 
 
 @router.post("/bulk")
@@ -69,6 +126,7 @@ async def bulk_create_orders(
 async def list_customers(
     skip: int = 0,
     limit: int = 50,
+    search: str | None = None,
     city: str | None = None,
     gender: str | None = None,
     min_spend: float | None = None,
@@ -80,6 +138,9 @@ async def list_customers(
     count_query = select(func.count()).select_from(Customer)
     filters = []
 
+    if search is not None and search.strip():
+        term = f"%{search.strip()}%"
+        filters.append((Customer.name.ilike(term)) | (Customer.city.ilike(term)))
     if city is not None:
         filters.append(Customer.city == city)
     if gender is not None:
@@ -209,6 +270,82 @@ async def attribute_customer_order(
         "campaign_id": payload.campaign_id,
         "customer_id": customer_id,
         "order_amount": payload.order_amount,
+    }
+
+
+@router.get("/{customer_id}/profile")
+async def get_customer_profile(
+    customer_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return a rich CDP-style customer profile with RFM and behaviour signals."""
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    now = datetime.utcnow()
+    last_order = db.scalars(
+        select(Order)
+        .where(Order.customer_id == customer_id)
+        .order_by(desc(Order.order_date))
+        .limit(1)
+    ).first()
+    top_category = _top_category(customer_id, db)
+    campaigns_received = (
+        db.scalar(
+            select(func.count())
+            .select_from(Message)
+            .where(Message.customer_id == customer_id)
+        )
+        or 0
+    )
+    campaigns_opened = (
+        db.scalar(
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.customer_id == customer_id,
+                Message.status.in_(["opened", "clicked"]),
+            )
+        )
+        or 0
+    )
+
+    recency_days = (
+        (now - customer.last_order_date).days if customer.last_order_date else 0
+    )
+    first_order_months_ago = (
+        max(0, int((now - customer.first_order_date).days // 30))
+        if customer.first_order_date
+        else 0
+    )
+    avg_transactional_value = (
+        round(customer.total_spend / customer.total_orders, 2)
+        if customer.total_orders
+        else 0.0
+    )
+
+    return {
+        "id": customer.id,
+        "name": customer.name,
+        "email": customer.email,
+        "phone": customer.phone,
+        "gender": customer.gender,
+        "city": customer.city,
+        "age": customer.age,
+        "rfm_persona": customer.rfm_persona or "N/A",
+        "recency_days": recency_days,
+        "frequency": customer.total_orders,
+        "first_order_months_ago": first_order_months_ago,
+        "avg_transactional_value": avg_transactional_value,
+        "last_bought_product": last_order.product_name if last_order else "N/A",
+        "next_best_category": customer.next_best_category or "N/A",
+        "preferred_channel": customer.preferred_channel or "N/A",
+        "preferred_day": customer.preferred_day or "N/A",
+        "top_category": top_category,
+        "total_spend": round(customer.total_spend, 2),
+        "campaigns_received": campaigns_received,
+        "campaigns_opened": campaigns_opened,
     }
 
 

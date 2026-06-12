@@ -34,6 +34,11 @@ def create_tables() -> None:
             "ALTER TABLE messages ADD COLUMN read_at DATETIME",
             "ALTER TABLE messages ADD COLUMN attributed_order BOOLEAN DEFAULT 0",
             "ALTER TABLE messages ADD COLUMN attributed_at DATETIME",
+            "ALTER TABLE customers ADD COLUMN preferred_channel TEXT",
+            "ALTER TABLE customers ADD COLUMN preferred_day TEXT",
+            "ALTER TABLE customers ADD COLUMN next_best_category TEXT",
+            "ALTER TABLE customers ADD COLUMN rfm_persona TEXT",
+            "ALTER TABLE customers ADD COLUMN first_order_date DATETIME",
         ]:
             try:
                 conn.execute(text(stmt))

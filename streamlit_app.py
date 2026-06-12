@@ -831,6 +831,173 @@ def _analytics_tab() -> None:
     else:
         st.caption("No segments yet. Ask the agent to find an audience.")
 
+    st.divider()
+    st.subheader("Customer Profiles")
+    st.caption("Click any customer to see their full CDP profile")
+    search = st.text_input("Search by name or city", key="customer_search")
+
+    try:
+        params = {"limit": 12}
+        if search:
+            params["search"] = search
+        customers_r = _request_backend("GET", "/customers", params=params, timeout=5).json()
+        customers_list = customers_r.get("data", [])
+    except Exception:
+        customers_list = []
+
+    persona_colors = {
+        "Champion": "#5B63FE",
+        "Loyal": "#22c55e",
+        "At Risk": "#F59E0B",
+        "Lapsed": "#EF4444",
+        "Solo Buyer": "#8B5CF6",
+        "New": "#06B6D4",
+    }
+
+    cols = st.columns(3)
+    for index, customer in enumerate(customers_list[:9]):
+        with cols[index % 3]:
+            persona = customer.get("rfm_persona") or ""
+            color = persona_colors.get(persona, "#888")
+            st.markdown(
+                f"""
+            <div style="border:1px solid rgba(0,0,0,0.08);border-radius:10px;
+                        padding:12px;margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;
+                            align-items:center;margin-bottom:6px;">
+                    <div style="font-weight:600;font-size:13px;">
+                        {customer['name']}</div>
+                    <span style="background:{color}22;color:{color};
+                                 padding:2px 7px;border-radius:12px;
+                                 font-size:10px;font-weight:600;">
+                        {persona}</span>
+                </div>
+                <div style="font-size:11px;color:#888;margin-bottom:6px;">
+                    {customer['city']} &middot; Age {customer.get('age', '')}
+                </div>
+                <div style="display:flex;gap:12px;font-size:12px;">
+                    <div><span style="color:#888;">Orders</span>
+                         <strong style="margin-left:4px;">
+                         {customer.get('total_orders', 0)}</strong></div>
+                    <div><span style="color:#888;">Spend</span>
+                         <strong style="margin-left:4px;">
+                         Rs {customer.get('total_spend', 0):,.0f}</strong></div>
+                </div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "View profile",
+                key=f"profile_{customer['id']}",
+                use_container_width=True,
+            ):
+                st.session_state.selected_customer_id = customer["id"]
+                st.rerun()
+
+    if st.session_state.get("selected_customer_id"):
+        customer_id = st.session_state.selected_customer_id
+        try:
+            profile = _request_backend(
+                "GET",
+                f"/customers/{customer_id}/profile",
+                timeout=5,
+            ).json()
+        except Exception:
+            profile = {}
+
+        if profile:
+            with st.container(border=True):
+                persona = profile.get("rfm_persona") or ""
+                color = persona_colors.get(persona, "#888")
+                st.markdown(
+                    f"""
+                <div style="display:flex;align-items:center;gap:16px;
+                            margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;
+                                background:{color}22;display:flex;
+                                align-items:center;justify-content:center;
+                                font-size:20px;font-weight:700;color:{color};">
+                        {profile['name'][0]}
+                    </div>
+                    <div>
+                        <div style="font-size:18px;font-weight:700;">
+                            {profile['name']}</div>
+                        <div style="font-size:12px;color:#888;">
+                            {profile.get('email', '')} &middot; {profile.get('phone', '')}</div>
+                    </div>
+                    <span style="background:{color}22;color:{color};
+                                 padding:4px 12px;border-radius:20px;
+                                 font-size:12px;font-weight:600;margin-left:auto;">
+                        {persona}</span>
+                </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Recency", f"{profile.get('recency_days', 0)} Days")
+                c2.metric("Frequency", profile.get("frequency", 0))
+                c3.metric(
+                    "First order since",
+                    f"{profile.get('first_order_months_ago', 0)} Months",
+                )
+                c4.metric(
+                    "Avg order value",
+                    f"Rs {profile.get('avg_transactional_value', 0):,.0f}",
+                )
+
+                st.markdown("---")
+                b1, b2, b3 = st.columns(3)
+                with b1:
+                    st.markdown(
+                        f"""
+                    <div style="font-size:11px;color:#888;">Last Bought Product</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        {profile.get('last_bought_product', 'N/A')}</div>
+                    <div style="font-size:11px;color:#888;margin-top:12px;">
+                        Next Best Category</div>
+                    <div style="font-weight:600;font-size:14px;color:#5B63FE;">
+                        {profile.get('next_best_category', 'N/A')}</div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+                with b2:
+                    channel = profile.get("preferred_channel", "N/A")
+                    st.markdown(
+                        f"""
+                    <div style="font-size:11px;color:#888;">Preferred Channel</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        {channel.title()}</div>
+                    <div style="font-size:11px;color:#888;margin-top:12px;">
+                        Preferred Day</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        {profile.get('preferred_day', 'N/A')}</div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+                with b3:
+                    st.markdown(
+                        f"""
+                    <div style="font-size:11px;color:#888;">Top Category</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        {profile.get('top_category', 'N/A')}</div>
+                    <div style="font-size:11px;color:#888;margin-top:12px;">
+                        Total Spend</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        Rs {profile.get('total_spend', 0):,.0f}</div>
+                    <div style="font-size:11px;color:#888;margin-top:12px;">
+                        Campaign Opens</div>
+                    <div style="font-weight:600;font-size:14px;">
+                        {profile.get('campaigns_opened', 0)} / {profile.get('campaigns_received', 0)}</div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+                if st.button("Close profile", key="close_profile"):
+                    del st.session_state.selected_customer_id
+                    st.rerun()
+
     running_campaigns = [c for c in campaigns if c["status"] == "running"]
     if running_campaigns:
         campaign_label = "campaigns" if len(running_campaigns) > 1 else "campaign"
