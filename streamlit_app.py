@@ -2116,14 +2116,17 @@ def _journeys_tab() -> None:
             journey_id = str(journey.get("id", ""))
             status_label = "Active" if status == "active" else "Paused"
             channel = str(journey.get("channel", "whatsapp")).title()
-            campaign_active = status == "active"
+            campaigns_triggered = int(journey.get("campaigns_triggered", 0) or 0)
+            campaign_active = status == "active" and (
+                campaigns_triggered > 0 or journey_id in st.session_state.running_journey_ids
+            )
             with st.container(border=True):
                 title_col, status_col = st.columns([4, 1])
                 title_col.markdown(f"**{journey.get('name', 'Journey')}**")
                 status_col.markdown(f"**{status_label}**")
                 st.caption(
                     f"{channel} | {journey.get('customers_enrolled', 0)} enrolled | "
-                    f"{journey.get('campaigns_triggered', 0)} campaigns triggered"
+                    f"{campaigns_triggered} campaigns triggered"
                 )
                 st.write(str(journey.get("message_template", ""))[:160])
 
@@ -2131,7 +2134,7 @@ def _journeys_tab() -> None:
                 with run_col:
                     if campaign_active:
                         st.button(
-                            "Campaign active",
+                            "Campaign running",
                             key=f"active_{journey_id}",
                             disabled=True,
                             use_container_width=True,
@@ -2175,11 +2178,11 @@ def _journeys_tab() -> None:
                         st.error("Status update failed.")
                 with hint_col:
                     if campaign_active:
-                        st.caption("Journey automation is active. Pause it to bring back the manual run control.")
+                        st.caption("Campaign already triggered. Pause the journey to reset the manual run control.")
                     elif status != "active":
                         st.caption("Resume before running.")
                     else:
-                        st.caption("Run now creates a campaign from eligible customers.")
+                        st.caption("Journey is active but no campaign has been triggered yet. Click Run now to create one.")
     else:
         st.info("No journeys yet. Activate one from the templates below.")
 
