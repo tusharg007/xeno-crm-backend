@@ -6,7 +6,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Customer, Order, Segment
+from models import Campaign, Customer, Message, Order, Segment
 from schemas import CustomerRead, SegmentCreate, SegmentRead
 
 
@@ -17,6 +17,7 @@ def execute_segment_filter(filter_rules: dict, db: Session) -> list[str]:
     """Returns list of customer_ids matching ALL provided filter rules."""
     query = select(Customer.id)
     joined_orders = False
+    joined_messages = False
 
     if "customer_ids" in filter_rules:
         ids = filter_rules["customer_ids"]
@@ -27,6 +28,27 @@ def execute_segment_filter(filter_rules: dict, db: Session) -> list[str]:
         query = query.join(Order, Order.customer_id == Customer.id)
         joined_orders = True
         query = query.where(Order.category == filter_rules["category"])
+
+    if "message_statuses" in filter_rules:
+        statuses = filter_rules["message_statuses"]
+        if isinstance(statuses, str):
+            statuses = [statuses]
+        query = query.join(Message, Message.customer_id == Customer.id)
+        joined_messages = True
+        query = query.where(Message.status.in_(statuses))
+
+    if "campaign_status" in filter_rules:
+        if not joined_messages:
+            query = query.join(Message, Message.customer_id == Customer.id)
+            joined_messages = True
+        query = query.join(Campaign, Campaign.id == Message.campaign_id)
+        query = query.where(Campaign.status == filter_rules["campaign_status"])
+
+    if "attributed_order" in filter_rules:
+        if not joined_messages:
+            query = query.join(Message, Message.customer_id == Customer.id)
+            joined_messages = True
+        query = query.where(Message.attributed_order == bool(filter_rules["attributed_order"]))
 
     if "recency_days" in filter_rules:
         cutoff = datetime.utcnow() - timedelta(days=int(filter_rules["recency_days"]))
@@ -56,7 +78,7 @@ def execute_segment_filter(filter_rules: dict, db: Session) -> list[str]:
     if "max_orders" in filter_rules:
         query = query.where(Customer.total_orders <= int(filter_rules["max_orders"]))
 
-    if joined_orders:
+    if joined_orders or joined_messages:
         query = query.distinct()
 
     return list(db.scalars(query).all())

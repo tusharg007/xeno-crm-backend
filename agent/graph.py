@@ -204,6 +204,81 @@ def _segment_preview_response(filter_rules: dict, db) -> dict:
     }
 
 
+def _campaign_engagement_filter_from_text(lowered: str) -> dict | None:
+    campaign_words = {"campaign", "campaigns", "message", "messages"}
+    if not any(word in lowered for word in campaign_words):
+        return None
+
+    if any(word in lowered for word in ["returned", "converted", "attributed", "revenue"]):
+        return {"attributed_order": True}
+    if any(word in lowered for word in ["clicked", "clickers", "clicking"]):
+        return {"message_statuses": ["clicked"]}
+    if any(word in lowered for word in ["opened", "openers", "opening"]):
+        return {"message_statuses": ["opened", "clicked"]}
+    if any(word in lowered for word in ["read", "readers"]):
+        return {"message_statuses": ["read", "opened", "clicked"]}
+    if any(word in lowered for word in ["delivered", "received"]):
+        return {"message_statuses": ["delivered", "read", "opened", "clicked"]}
+    if any(word in lowered for word in ["failed", "bounced"]):
+        return {"message_statuses": ["failed"]}
+    return None
+
+
+def _describe_engagement_filter(filter_rules: dict) -> str:
+    if filter_rules.get("attributed_order"):
+        return "customers who placed attributed orders after a campaign"
+    statuses = set(filter_rules.get("message_statuses") or [])
+    if statuses == {"clicked"}:
+        return "customers who clicked a campaign message"
+    if statuses == {"opened", "clicked"}:
+        return "customers who opened a campaign message"
+    if statuses == {"read", "opened", "clicked"}:
+        return "customers who read a campaign message"
+    if statuses == {"delivered", "read", "opened", "clicked"}:
+        return "customers who received a campaign message"
+    if statuses == {"failed"}:
+        return "customers whose campaign message failed"
+    return "customers matching campaign engagement filters"
+
+
+def _campaign_engagement_response(filter_rules: dict, db, save_now: bool = False) -> dict:
+    customer_ids = execute_segment_filter(filter_rules, db)
+    sample = _sample_customers(customer_ids, db)
+    description = _describe_engagement_filter(filter_rules)
+    preview = {
+        "count": len(customer_ids),
+        "sample": sample,
+        "filter_rules": filter_rules,
+        "filter_summary": f"Matched {description}.",
+    }
+
+    if not customer_ids:
+        return {
+            "response": f"I found 0 {description}. Wait for campaign callbacks to arrive or try a broader audience.",
+            "segment_preview": preview,
+            "campaign_draft": None,
+            "awaiting_approval": False,
+            "pending_segment_id": None,
+        }
+
+    if save_now:
+        saved_session = {"segment_preview": preview}
+        return _draft_for_saved_segment(saved_session, db)
+
+    return {
+        "response": (
+            f"I found {len(customer_ids)} {description}.\n"
+            "Here's a sample:\n"
+            f"{_format_customer_sample(sample)}\n\n"
+            "Want me to save this audience and draft a message?"
+        ),
+        "segment_preview": preview,
+        "campaign_draft": None,
+        "awaiting_approval": False,
+        "pending_segment_id": None,
+    }
+
+
 def _category_insights_response(gender: str | None, db) -> dict:
     query = (
         db.query(
@@ -377,7 +452,18 @@ def _draft_for_saved_segment(session: dict, db) -> dict | None:
         return None
 
     name = "AI Audience"
-    if "category" in filter_rules:
+    if "message_statuses" in filter_rules:
+        name = "Campaign Engaged Audience"
+        statuses = set(filter_rules.get("message_statuses") or [])
+        if statuses == {"opened", "clicked"}:
+            name = "Campaign Openers"
+        elif statuses == {"clicked"}:
+            name = "Campaign Clickers"
+        elif statuses == {"delivered", "read", "opened", "clicked"}:
+            name = "Campaign Delivered Audience"
+    elif filter_rules.get("attributed_order"):
+        name = "Campaign Return Buyers"
+    elif "category" in filter_rules:
         name = f"{filter_rules['category']} Audience"
     elif filter_rules.get("max_orders") == 2:
         name = "One-time Buyers"
@@ -430,6 +516,14 @@ def _deterministic_response(message: str, session: dict, db) -> dict | None:
     approval_tokens = {"yes", "save", "draft", "approve", "approved"}
     launch_tokens = {"launch", "send", "go"}
     wants_save = bool(tokens & approval_tokens)
+    engagement_filter = _campaign_engagement_filter_from_text(lowered)
+    engagement_audience_query = engagement_filter is not None and any(
+        word in lowered
+        for word in ["customer", "customers", "audience", "people", "ones", "users", "those", "who"]
+    )
+    if engagement_audience_query:
+        return _campaign_engagement_response(engagement_filter, db, save_now=wants_save)
+
     if wants_save:
         saved = _draft_for_saved_segment(session, db)
         if saved:
