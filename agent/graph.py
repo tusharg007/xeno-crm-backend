@@ -236,6 +236,46 @@ def _category_insights_response(gender: str | None, db) -> dict:
     }
 
 
+def _plain_response(response: str) -> dict:
+    return {
+        "response": response,
+        "segment_preview": None,
+        "campaign_draft": None,
+        "awaiting_approval": False,
+        "pending_segment_id": None,
+    }
+
+
+def _help_response() -> dict:
+    return _plain_response(
+        "I can help you run CRM campaign workflows for StyleHub.\n\n"
+        "Try asking me to:\n"
+        "* Find an audience, for example: `Find women who bought ethnic wear but haven't ordered in 45 days`\n"
+        "* Explain buying patterns, for example: `What categories are men buying from?`\n"
+        "* Save an audience and draft campaign messages after I show a matched audience\n"
+        "* Launch an approved campaign on WhatsApp, SMS, or Email\n"
+        "* Show campaign performance after a campaign has been launched\n\n"
+        "For the cleanest demo flow: find an audience, say `yes` to save and draft, choose a message, then launch."
+    )
+
+
+def _is_help_or_greeting(lowered: str, tokens: set[str]) -> bool:
+    if lowered.strip() in {"hi", "hello", "hey", "hii", "yo"}:
+        return True
+    help_phrases = [
+        "how to use",
+        "how do i use",
+        "what can you do",
+        "help",
+        "guide",
+        "instructions",
+        "how it works",
+    ]
+    if any(phrase in lowered for phrase in help_phrases):
+        return True
+    return len(tokens) <= 2 and bool(tokens & {"hi", "hello", "hey", "help"})
+
+
 def _rate(numerator: int | float, denominator: int | float) -> float:
     return round((float(numerator or 0) / float(denominator or 1)) * 100, 1)
 
@@ -384,11 +424,25 @@ def _draft_for_saved_segment(session: dict, db) -> dict | None:
 def _deterministic_response(message: str, session: dict, db) -> dict | None:
     lowered = message.lower()
     tokens = set(re.findall(r"[a-z]+", lowered))
-    wants_save = bool(tokens & {"yes", "save", "draft", "approve", "approved"})
+    if _is_help_or_greeting(lowered, tokens):
+        return _help_response()
+
+    approval_tokens = {"yes", "save", "draft", "approve", "approved"}
+    launch_tokens = {"launch", "send", "go"}
+    wants_save = bool(tokens & approval_tokens)
     if wants_save:
         saved = _draft_for_saved_segment(session, db)
         if saved:
             return saved
+        return _plain_response(
+            "I do not have an audience ready to save yet. First ask me to find a customer audience, "
+            "then say `yes` after I show the matched count and sample."
+        )
+    if bool(tokens & launch_tokens) and not session.get("pending_segment_id"):
+        return _plain_response(
+            "I do not have an approved campaign ready to launch yet. First find an audience, "
+            "save it, choose a message, and then ask me to launch."
+        )
 
     if (
         "campaign performance" in lowered
@@ -429,6 +483,27 @@ def _deterministic_response(message: str, session: dict, db) -> dict | None:
     )
     if filter_rules and is_audience_query:
         return _segment_preview_response(filter_rules, db)
+
+    actionable_terms = {
+        "find",
+        "show",
+        "audience",
+        "customers",
+        "buyers",
+        "bought",
+        "buying",
+        "categories",
+        "campaign",
+        "performance",
+        "analytics",
+        "launch",
+        "segment",
+        "draft",
+        "message",
+        "journey",
+    }
+    if not (tokens & actionable_terms):
+        return _help_response()
 
     return None
 

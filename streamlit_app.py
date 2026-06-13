@@ -817,7 +817,6 @@ def _sync_agent_state(data: dict) -> None:
     segment_id = (
         data.get("pending_segment_id")
         or (data.get("campaign_draft") or {}).get("segment_id")
-        or st.session_state.get("pending_segment_id")
     )
     if segment_id and st.session_state.campaign_draft is not None:
         st.session_state.campaign_draft["segment_id"] = segment_id
