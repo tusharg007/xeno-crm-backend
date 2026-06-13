@@ -111,6 +111,9 @@ class JourneyRead(BaseModel):
     channel: str
     customers_enrolled: int
     campaigns_triggered: int
+    matched_now: int = 0
+    eligible_now: int = 0
+    excluded_active_campaign: int = 0
     created_at: datetime
 
     @field_validator("trigger_rules", mode="before")

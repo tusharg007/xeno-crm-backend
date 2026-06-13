@@ -851,6 +851,31 @@ def _local_campaign_performance_reply() -> str:
         campaigns = campaigns_resp.get("data", [])
 
     if not campaigns:
+        journeys_r = _get_json("/journeys", [])
+        journeys = journeys_r if isinstance(journeys_r, list) else []
+        active_journeys = [
+            journey for journey in journeys if str(journey.get("status", "")).lower() == "active"
+        ]
+        if active_journeys:
+            lines = []
+            for journey in active_journeys[:5]:
+                matched = int(journey.get("matched_now", 0) or 0)
+                eligible = int(journey.get("eligible_now", 0) or 0)
+                triggered = int(journey.get("campaigns_triggered", 0) or 0)
+                lines.append(
+                    f"* {journey.get('name', 'Journey')}: {matched} matched now, "
+                    f"{eligible} eligible to queue, {triggered} campaigns triggered"
+                )
+            return (
+                "There are no launched campaigns yet, so delivery, open, click, "
+                "and revenue metrics are not available.\n\n"
+                f"Journey readiness report ({len(active_journeys)} active):\n"
+                + "\n".join(lines)
+                + "\n\n"
+                "Click Run now on any journey with eligible customers to create the "
+                "first campaign. After it queues messages, Analytics will show the "
+                "campaign performance report."
+            )
         return (
             "There is no campaign performance to show yet because no campaigns have "
             "been launched. Create or run a campaign first, then check Analytics."
@@ -2117,6 +2142,9 @@ def _journeys_tab() -> None:
             status_label = "Active" if status == "active" else "Paused"
             channel = str(journey.get("channel", "whatsapp")).title()
             campaigns_triggered = int(journey.get("campaigns_triggered", 0) or 0)
+            matched_now = int(journey.get("matched_now", 0) or 0)
+            eligible_now = int(journey.get("eligible_now", 0) or 0)
+            excluded_now = int(journey.get("excluded_active_campaign", 0) or 0)
             campaign_active = status == "active" and (
                 campaigns_triggered > 0 or journey_id in st.session_state.running_journey_ids
             )
@@ -2125,7 +2153,9 @@ def _journeys_tab() -> None:
                 title_col.markdown(f"**{journey.get('name', 'Journey')}**")
                 status_col.markdown(f"**{status_label}**")
                 st.caption(
-                    f"{channel} | {journey.get('customers_enrolled', 0)} enrolled | "
+                    f"{channel} | {matched_now} matched now | {eligible_now} eligible | "
+                    f"{excluded_now} already in running campaigns | "
+                    f"{journey.get('customers_enrolled', 0)} enrolled | "
                     f"{campaigns_triggered} campaigns triggered"
                 )
                 st.write(str(journey.get("message_template", ""))[:160])
@@ -2181,8 +2211,12 @@ def _journeys_tab() -> None:
                         st.caption("Campaign already triggered. Pause the journey to reset the manual run control.")
                     elif status != "active":
                         st.caption("Resume before running.")
+                    elif eligible_now <= 0:
+                        st.caption("Journey is active, but there are no eligible customers to queue right now.")
                     else:
-                        st.caption("Journey is active but no campaign has been triggered yet. Click Run now to create one.")
+                        st.caption(
+                            f"Journey is active and ready. Click Run now to queue {eligible_now} customers."
+                        )
     else:
         st.info("No journeys yet. Activate one from the templates below.")
 

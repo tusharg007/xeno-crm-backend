@@ -84,15 +84,44 @@ def _active_campaign_customer_ids(db: Session) -> set[str]:
     )
 
 
+def _journey_readiness(journey: Journey, db: Session) -> dict[str, int]:
+    """Return live match/eligibility counts for a journey."""
+    if journey.status != "active":
+        return {
+            "matched_now": 0,
+            "eligible_now": 0,
+            "excluded_active_campaign": 0,
+        }
+
+    try:
+        trigger_rules = json.loads(journey.trigger_rules)
+        customer_ids = set(execute_segment_filter(trigger_rules, db))
+    except Exception:
+        customer_ids = set()
+
+    active_customer_ids = _active_campaign_customer_ids(db)
+    excluded = len(customer_ids.intersection(active_customer_ids))
+    return {
+        "matched_now": len(customer_ids),
+        "eligible_now": max(len(customer_ids) - excluded, 0),
+        "excluded_active_campaign": excluded,
+    }
+
+
 @router.get("/templates")
 async def journey_templates() -> list[dict[str, object]]:
     return JOURNEY_TEMPLATES
 
 
 @router.get("/")
-async def list_journeys(db: Session = Depends(get_db)) -> list[JourneyRead]:
+async def list_journeys(db: Session = Depends(get_db)) -> list[dict[str, object]]:
     journeys = db.scalars(select(Journey).order_by(desc(Journey.created_at))).all()
-    return [JourneyRead.model_validate(journey) for journey in journeys]
+    response = []
+    for journey in journeys:
+        item = JourneyRead.model_validate(journey).model_dump()
+        item.update(_journey_readiness(journey, db))
+        response.append(item)
+    return response
 
 
 @router.post("/", response_model=JourneyRead)

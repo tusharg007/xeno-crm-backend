@@ -35,7 +35,7 @@ from agent.groq_utils import GROQ_UNAVAILABLE_MESSAGE, build_groq_model, retry_a
 from agent.tools import CATEGORY_ALIASES, get_tools
 from config import settings
 from database import SessionLocal
-from models import Campaign, Customer, Order, Segment
+from models import Campaign, Customer, Journey, Message, Order, Segment
 from routers.segments import execute_segment_filter
 
 
@@ -240,13 +240,59 @@ def _rate(numerator: int | float, denominator: int | float) -> float:
     return round((float(numerator or 0) / float(denominator or 1)) * 100, 1)
 
 
+def _active_campaign_customer_ids(db) -> set[str]:
+    return set(
+        db.scalars(
+            select(Message.customer_id)
+            .join(Campaign, Campaign.id == Message.campaign_id)
+            .where(Campaign.status == "running")
+        ).all()
+    )
+
+
+def _journey_readiness_lines(db) -> list[str]:
+    active_customer_ids = _active_campaign_customer_ids(db)
+    journeys = db.scalars(
+        select(Journey)
+        .where(Journey.status == "active")
+        .order_by(desc(Journey.created_at))
+        .limit(5)
+    ).all()
+    lines = []
+    for journey in journeys:
+        try:
+            trigger_rules = json.loads(journey.trigger_rules)
+            customer_ids = set(execute_segment_filter(trigger_rules, db))
+        except Exception:
+            customer_ids = set()
+        excluded = len(customer_ids.intersection(active_customer_ids))
+        eligible = max(len(customer_ids) - excluded, 0)
+        lines.append(
+            f"* {journey.name}: {len(customer_ids)} matched now, "
+            f"{eligible} eligible to queue, {journey.campaigns_triggered or 0} campaigns triggered"
+        )
+    return lines
+
+
 def _campaign_performance_response(db) -> dict:
     campaigns = db.scalars(
         select(Campaign).order_by(desc(Campaign.created_at)).limit(5)
     ).all()
     total_campaigns = db.scalar(select(func.count()).select_from(Campaign)) or 0
     if not campaigns:
-        response = "There is no campaign performance to show yet because no campaigns have been launched."
+        journey_lines = _journey_readiness_lines(db)
+        if journey_lines:
+            response = (
+                "There are no launched campaigns yet, so delivery, open, click, "
+                "and revenue metrics are not available.\n\n"
+                f"Journey readiness report ({len(journey_lines)} active shown):\n"
+                + "\n".join(journey_lines)
+                + "\n\n"
+                "Click Run now on a journey with eligible customers to create the first campaign. "
+                "After it queues messages, Analytics will show the campaign performance report."
+            )
+        else:
+            response = "There is no campaign performance to show yet because no campaigns have been launched."
     else:
         total_sent = sum(campaign.total_sent or 0 for campaign in campaigns)
         total_delivered = sum(campaign.total_delivered or 0 for campaign in campaigns)
