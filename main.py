@@ -93,7 +93,7 @@ async def health(db: Session = Depends(get_db)):
 
     channel_url = settings.CHANNEL_SERVICE_URL.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.get(f"{channel_url}/health")
             checks["channel_service"] = "ok" if r.status_code == 200 else f"http {r.status_code}"
     except Exception as e:

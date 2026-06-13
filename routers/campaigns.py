@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 import threading
 from datetime import datetime
 from uuid import uuid4
@@ -58,16 +59,31 @@ def _rate(numerator: float, denominator: float) -> float:
 
 
 async def _send_batch(client: httpx.AsyncClient, payload: list[dict]) -> None:
-    try:
-        await client.post(f"{settings.CHANNEL_SERVICE_URL}/send-batch", json=payload)
-    except Exception as exc:
-        logger.warning("Channel service batch send failed: %s", exc)
+    for attempt in range(5):
+        try:
+            response = await client.post(
+                f"{settings.CHANNEL_SERVICE_URL}/send-batch",
+                json=payload,
+            )
+            if 200 <= response.status_code < 300:
+                return
+            logger.warning(
+                "Channel service returned %s for batch send, attempt %s/5",
+                response.status_code,
+                attempt + 1,
+            )
+            if response.status_code < 500 and response.status_code != 429:
+                break
+        except Exception as exc:
+            logger.warning("Channel service batch send failed, attempt %s/5: %s", attempt + 1, exc)
+        if attempt < 4:
+            await asyncio.sleep(min(20.0, 1.0 * (2**attempt)) + random.uniform(0, 0.5))
 
 
 async def _send_campaign_batches(payloads: list[dict]) -> None:
     if not payloads:
         return
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         await asyncio.gather(
             *[_send_batch(client, chunk) for chunk in _chunks(payloads, 50)]
         )
@@ -167,6 +183,43 @@ async def launch_campaign(
     result, send_payloads = launch_campaign_record(campaign, db)
     schedule_campaign_batches(send_payloads)
     return result
+
+
+@router.post("/{campaign_id}/retry-delivery")
+async def retry_campaign_delivery(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Resend queued/in-transit messages for a running campaign to the channel service."""
+    campaign = _campaign_or_404(campaign_id, db)
+    messages = db.scalars(
+        select(Message)
+        .where(Message.campaign_id == campaign.id)
+        .where(Message.status.in_(["queued", "sent"]))
+    ).all()
+
+    payloads = []
+    for message in messages:
+        customer = db.get(Customer, message.customer_id)
+        if customer is None:
+            continue
+        payloads.append(
+            {
+                "message_id": message.id,
+                "campaign_id": campaign.id,
+                "customer_id": customer.id,
+                "phone": customer.phone,
+                "message": message.personalized_message,
+                "channel": campaign.channel,
+            }
+        )
+
+    schedule_campaign_batches(payloads)
+    return {
+        "campaign_id": campaign.id,
+        "retry_queued": len(payloads),
+        "status": campaign.status,
+    }
 
 
 @router.get("/")
