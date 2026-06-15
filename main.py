@@ -117,15 +117,16 @@ async def demo_reset(db: Session = Depends(get_db)):
     Clears only transactional data (campaigns, messages, segments) so the
     evaluator can run multiple demo flows without stale data cluttering the UI.
     """
-    from models import Message, Campaign, Segment
+    from models import Message, Campaign, Segment, Journey
     try:
         db.query(Message).delete()
         db.query(Campaign).delete()
         db.query(Segment).delete()
+        db.query(Journey).delete()
         db.commit()
         return {
             "ok": True,
-            "message": "Demo reset. Campaigns, messages, and segments cleared.",
+            "message": "Demo reset. Campaigns, messages, segments, and journeys cleared.",
             "customers_preserved": db.query(Customer).count()
         }
     except Exception as e:

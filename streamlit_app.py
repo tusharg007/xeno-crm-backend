@@ -950,6 +950,7 @@ def _sidebar_legacy() -> None:
                 st.session_state.segment_preview = None
                 st.session_state.campaign_draft = None
                 st.session_state.awaiting_approval = False
+                st.session_state.running_journey_ids = set()
                 st.success("Demo reset.")
             else:
                 st.error("Demo reset failed.")
@@ -1917,6 +1918,7 @@ def _sidebar() -> None:
                 st.session_state.segment_preview = None
                 st.session_state.campaign_draft = None
                 st.session_state.awaiting_approval = False
+                st.session_state.running_journey_ids = set()
                 st.success("Demo reset.")
                 _clear_backend_cache()
                 st.rerun()
