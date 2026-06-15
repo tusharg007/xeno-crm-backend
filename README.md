@@ -17,6 +17,13 @@ Built for Xeno's FDE Internship Drive 2026.
 | CRM health | [https://xeno-crm-backend-uelp.onrender.com/health](https://xeno-crm-backend-uelp.onrender.com/health) |
 | Channel health | [https://xeno-channel-service-c1yr.onrender.com/health](https://xeno-channel-service-c1yr.onrender.com/health) |
 
+## Walkthrough videos
+| # | Video | What it covers |
+|---|---|---|
+| 1 | [Full Demo](https://www.loom.com/share/db81565982d84bd1a872bfbf2a62f6ac) | AI agent finding audience, drafting messages, launching campaign, live analytics, journeys, revenue attribution |
+| 2 | [Architecture Overview](https://www.loom.com/share/3974c6503bff4c0b84a2123dd674b196) | Three-layer architecture, hybrid agent design, channel service callback loop, batch delivery |
+| 3 | [Code Walkthrough & AI Design](https://www.loom.com/share/6f3d709c879947d0aabc0c72568a43c7) | Receipt handler idempotency, SQL-based aggregate counters, auto-complete logic, hybrid deterministic + LLM rationale |
+
 ## Architecture
 Two independently deployed services communicating only via HTTP:
 
