@@ -1,4 +1,4 @@
-# Xeno Mini CRM — StyleHub
+# Mini CRM — StyleHub
 
 An AI-native campaign manager for retail brands. A marketer describes who they want
 to reach in plain English; the agent finds the audience, writes the message, and
