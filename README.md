@@ -7,7 +7,6 @@ delivery and fires real-time callbacks, making the analytics dashboard update li
 Lifecycle automations (Journeys) let marketers set up always-on triggers that
 auto-launch campaigns when customer segments match.
 
-Built for Xeno's FDE Internship Drive 2026.
 
 ## Live demo
 | | |
