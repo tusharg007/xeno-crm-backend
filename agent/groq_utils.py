@@ -20,8 +20,8 @@ GROQ_RETRY_ATTEMPTS = 3
 GROQ_BACKOFF_SECONDS = 0.75
 
 GROQ_UNAVAILABLE_MESSAGE = (
-    "I could not reach Groq after a few retries. The CRM database tools are still "
-    "available, so try one of the saved demo prompts or retry in a minute."
+    "I could not reach Groq after a few retries. The local analytics and campaign "
+    "tools are still available, so try a saved demo prompt or retry in a minute."
 )
 
 

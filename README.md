@@ -1,304 +1,292 @@
-# Mini CRM — StyleHub
+# Global Messaging Product Analytics & AI Insights Platform
 
-An AI-native campaign manager for retail brands. A marketer describes who they want
-to reach in plain English; the agent finds the audience, writes the message, and
-gates on human approval before launching. A separate channel service simulates async
-delivery and fires real-time callbacks, making the analytics dashboard update live.
-Lifecycle automations (Journeys) let marketers set up always-on triggers that
-auto-launch campaigns when customer segments match.
+An end-to-end product analytics and data engineering project for a simulated global messaging and social platform. The project models how teams at large-scale consumer platforms track engagement, retention, feature adoption, notification performance, platform safety, and campaign outcomes from raw event data through dashboards and an AI insights copilot.
 
+This is not a toy dashboard. It is designed as a miniature analytics stack: synthetic app events are generated, processed through an ETL pipeline, stored in analytics-ready tables, queried through a SQL metrics layer, visualized in Streamlit, and exposed to an AI copilot that can answer product questions in natural language.
 
-## Live demo
-| | |
-|---|---|
-| Frontend | [StyleHub CRM](https://xeno-crm-backend-5eeqqhufg62kjv6zlsuhvz.streamlit.app) |
-| API docs | [https://xeno-crm-backend-uelp.onrender.com/docs](https://xeno-crm-backend-uelp.onrender.com/docs) |
-| CRM health | [https://xeno-crm-backend-uelp.onrender.com/health](https://xeno-crm-backend-uelp.onrender.com/health) |
-| Channel health | [https://xeno-channel-service-c1yr.onrender.com/health](https://xeno-channel-service-c1yr.onrender.com/health) |
+The project uses synthetic data only. No real user data, private messages, or production platform data is used.
 
-## Walkthrough videos
-| # | Video | What it covers |
-|---|---|---|
-| 1 | [Full Demo](https://www.loom.com/share/db81565982d84bd1a872bfbf2a62f6ac) | AI agent finding audience, drafting messages, launching campaign, live analytics, journeys, revenue attribution |
-| 2 | [Architecture Overview](https://www.loom.com/share/3974c6503bff4c0b84a2123dd674b196) | Three-layer architecture, hybrid agent design, channel service callback loop, batch delivery |
-| 3 | [Code Walkthrough & AI Design](https://www.loom.com/share/6f3d709c879947d0aabc0c72568a43c7) | Receipt handler idempotency, SQL-based aggregate counters, auto-complete logic, hybrid deterministic + LLM rationale |
+## What This Project Demonstrates
+
+- Product analytics for a high-volume messaging/social application
+- Data engineering pipelines from raw events to modeled analytics tables
+- SQL-based KPI, funnel, retention, and safety metric calculation
+- Dashboard design for executives, product managers, data analysts, and trust/safety teams
+- AI-assisted analytics through a natural-language insights copilot
+- A campaign and delivery simulator that demonstrates webhook-style event callbacks
+- Mock-mode operation so the analytics dashboard works without external API keys
 
 ## Architecture
-Two independently deployed services communicating only via HTTP:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Streamlit Frontend                        │
-│  AI Campaign Agent │ Analytics Dashboard │ Journeys Manager  │
-└──────┬─────────────────────┬──────────────────┬─────────────┘
-       │ POST /agent/chat    │ GET /campaigns   │ POST /journeys/{id}/trigger
-       ▼                     ▼                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   FastAPI CRM Backend                        │
-│                                                              │
-│  Hybrid Agent (agent/)          REST API (routers/)           │
-│  ├─ Deterministic fast-path     ├─ /customers (CRUD + CDP)   │
-│  ├─ LangGraph LLM fallback     ├─ /segments                 │
-│  ├─ 6 tools                     ├─ /campaigns                │
-│  ├─ HITL approval gate          ├─ /journeys (6 templates)   │
-│  ├─ Groq retry/backoff          └─ /receipt (callbacks)      │
-│  └─ In-memory session store                                  │
-│                                                              │
-│              SQLite - 6 tables                               │
-│  customers │ orders │ segments │ journeys │ campaigns │ msgs │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ POST /send-batch (chunks of 50)
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│           Channel Service (separate deploy)                  │
-│  Receives messages → simulates delivery lifecycle            │
-│  Async: sent → delivered → read → opened → clicked           │
-│  Fires callbacks → POST /receipt on CRM backend              │
-│  Revenue attribution → POST /customers/{id}/order-attributed │
-└─────────────────────────────────────────────────────────────┘
+Synthetic Messaging App Events
+  -> Raw Data Layer
+  -> ETL Pipeline
+  -> Analytics Tables
+  -> SQL Metrics Layer
+  -> Dashboards
+  -> AI Insights Copilot
+  -> Product/Safety Recommendations
 ```
 
-## What makes this AI-native
-The agent uses a **hybrid deterministic + LLM architecture**. Common intents
-(greetings, audience queries with clear filters, category insights, campaign
-performance, save/launch confirmations) are handled by a deterministic fast-path
-that parses the user's message, runs SQL queries directly, and returns structured
-responses — no LLM call needed. Only ambiguous or complex requests fall through to
-the LangGraph ReAct loop backed by Groq's Llama 3.3 70B.
+### How The Layers Map To This Repository
 
-This design gives sub-second responses for the most common flows, eliminates LLM
-rate-limit sensitivity for demo scenarios, and keeps the agent accurate by
-grounding every data answer in actual SQL results rather than LLM hallucination.
+| Layer | Purpose | Main Files |
+| --- | --- | --- |
+| Synthetic Messaging App Events | Generates realistic product events such as messages, sessions, notifications, crashes, feature usage, reports, and campaign interactions. | `pipelines/generate_synthetic_data.py` |
+| Raw Data Layer | Stores generated event data as raw CSV files before modeling. | `data/raw/` |
+| ETL Pipeline | Cleans, normalizes, and loads raw events into DuckDB. | `pipelines/etl_pipeline.py` |
+| Analytics Tables | Builds metric-ready tables for product, retention, funnel, safety, and campaign analysis. | `pipelines/build_metric_tables.py` |
+| SQL Metrics Layer | Provides reusable read-only SQL tools for dashboards and the AI copilot. | `analytics/`, `ai/tools.py` |
+| Dashboards | Streamlit interface for executive overview, retention, feature adoption, platform safety, and AI insights. | `app/streamlit_app.py` |
+| AI Insights Copilot | Answers product analytics questions using deterministic analytics tools, optional Groq LLM calls, and project documentation context. | `ai/copilot.py`, `ai/rag.py` |
+| Product/Safety Recommendations | Turns metrics and anomalies into practical product recommendations. | `docs/business_rules.md`, `docs/ai_copilot_design.md` |
 
-The HITL approval gate is a deliberate design decision: when the agent has built
-a segment and drafted a message, it embeds `AWAITING_APPROVAL:[segment_id]` as
-a signal token in its response. The graph parses this signal, sets
-`awaiting_approval=True` in state, and surfaces a confirmation card in the UI.
-`launch_campaign` cannot be called until the marketer explicitly approves; the
-system prompt forbids it. This prevents a misunderstood instruction from
-firing a campaign to thousands of real customers.
+## Product Analytics Scope
 
-## Key features
+The platform tracks metrics that are common in messaging, social, and communication products:
 
-### AI campaign agent (6 tools)
-| Tool | Purpose |
-|---|---|
-| `query_customers_by_filters` | Find audience by recency, spend, gender, city, category, order count |
-| `get_category_insights` | SQL-backed category buying analytics (never answers from general knowledge) |
-| `create_segment` | Save matched audience with `created_by='ai'` tag |
-| `draft_campaign_message` | Generate 3 WhatsApp/SMS message variants via LLM |
-| `launch_campaign` | Create campaign + batch-POST to channel service in chunks of 50 |
-| `get_campaign_analytics` | Campaign performance with delivery/open/click rates and revenue attribution |
+- Daily active users, weekly trends, and engagement movement
+- Message volume, delivery rate, open rate, click rate, and notification response
+- Retention cohorts and activation funnels
+- Feature adoption for messaging, groups, media, payments, profile, and search-style actions
+- Safety signals such as spam reports, abuse reports, suspicious friend requests, and block actions
+- Reliability metrics such as crash rate and platform-level issues
+- Campaign delivery and attribution metrics through simulated delivery callbacks
 
-### Journeys (lifecycle automation)
-Six pre-built journey templates that auto-trigger campaigns when customer
-segments match:
-- **Win-Back Lapsed Customers** — inactive 60+ days
-- **Save High-Value Customers** — top spenders becoming inactive (30-60 days, ≥₹5,000)
-- **First Purchase Follow-up** — new customers within 7 days of first order
-- **Reward Repeat Buyers** — 5+ orders, active within 45 days
-- **Re-engage Lapsed Buyers** — inactive 90-180 days
-- **Category Cross-Sell** — suggest next best category to single-category buyers
+## Relevance to Data Analytics / Data Engineering / AI Product Analytics Roles
 
-Each journey creates a segment, launches a campaign, and excludes customers
-already in active campaigns to prevent message fatigue.
+This project is intentionally positioned for analytics and data-focused internship roles. It demonstrates the type of work expected in data analytics, product analytics, analytics engineering, data engineering, and AI product analytics teams.
 
-### Customer intelligence (CDP-style profiles)
-Rich customer profiles with computed fields:
-- **RFM persona**: Champion, Loyal, At Risk, Lapsed, Solo Buyer, New
-- **Preferred channel**: WhatsApp / SMS / Email (weighted by gender)
-- **Preferred day**: Weekdays vs Weekends (based on order history)
-- **Next best category**: Cross-sell recommendation from purchase patterns
-- **Campaign engagement**: messages received, opened, attributed orders
+### Large-Scale Event Analytics
 
-### Revenue attribution pipeline
-The channel service simulates post-click conversions: 25% of clicked messages
-generate an attributed order (random ₹500-₹4,000). The `/customers/{id}/order-attributed`
-endpoint attributes the order to the campaign within a 7-day delivery window.
-Campaign aggregate counters (`total_attributed_orders`, `total_attributed_revenue`)
-update in real time.
+The project starts from event-level data rather than hard-coded charts. It simulates app usage at the event level, which is how real messaging and social platforms operate. Every dashboard metric is derived from raw behavioral events such as sessions, messages, notifications, feature usage, safety reports, and campaign callbacks.
 
-## Key technical decisions
-| Decision | What I did | Why | At production scale |
-|---|---|---|---|
-| Database | SQLite | Zero config, sufficient for demo scope | PostgreSQL with read replicas for analytics |
-| LLM provider | Groq with Llama 3.3 70B | Fast responses on the free tier and OpenAI-compatible chat semantics | Provider routing, fallbacks, and spend controls |
-| Agent architecture | Hybrid deterministic fast-path + LangGraph LLM fallback | Sub-second responses for common flows, LLM reserved for ambiguous requests | Intent classifier → deterministic handlers with LLM as catch-all |
-| Groq resilience | Retry with exponential backoff (3 attempts, 12s timeout) | Free tier rate limits cause transient failures | Circuit breaker with provider fallback chain |
-| Channel simulation | Async callbacks with per-channel probability profiles | Mirrors real provider lifecycle such as Twilio or MSG91 | Redis queue + dead-letter queue for guaranteed delivery |
-| Callback idempotency | `STATUS_ORDER` index comparison | Prevents backward state on out-of-order or duplicate callbacks | Idempotency keys + exactly-once semantics via DB unique constraint |
-| Agent memory | In-memory session dict, module-level | Simple, demo-safe, no external dependency | Redis with TTL for distributed session state |
-| Campaign launch | Batch POST in chunks of 50 via async fan-out | Avoids thundering herd on channel service | Message queue such as SQS or Kafka between CRM and channel service |
-| HITL gate | Signal token in agent response text | Avoids complex graph branching, keeps state machine simple | Dedicated approval workflow with audit log and rollback |
-| Attribution | 7-day window post-delivery, channel service simulates conversions | Mirrors real-world campaign attribution logic | Event-sourced attribution with configurable windows per campaign |
+### Product KPI Tracking
 
-## The callback loop in detail
-When a campaign launches, the CRM sends campaign messages to the channel service
-`/send-batch` endpoint. The channel service simulates delivery asynchronously:
-each message goes through sent → delivered → read → opened → clicked with
-channel-specific probability profiles:
+The dashboard tracks practical product KPIs including active users, delivery rate, feature adoption, retention, crash rate, safety reports, and campaign performance. These are the types of metrics a product analytics team would monitor for a consumer app.
 
-| Channel | Failure rate | Read rate | Open rate | Click rate |
-|---|---|---|---|---|
-| WhatsApp | 3% | 70% | 55% | 32% |
-| SMS | 8% | — | 35% | 18% |
-| Email | 5% | — | 25% | 22% |
+### Retention And Funnel Analysis
 
-Each state transition fires a POST back to `/receipt` on the CRM. The receipt
-handler validates forward progress via `STATUS_ORDER` index comparison, updates
-the message's status and timestamp, then recalculates campaign aggregate counters
-using SQL COUNT subqueries rather than Python-side counting to stay safe under
-concurrent callbacks. The campaign auto-completes when all messages reach a
-terminal state.
+The retention and funnel views show how users move from acquisition to activation to repeat engagement. This is relevant for understanding onboarding quality, product stickiness, and where users drop off.
 
-After a click event, the channel service waits 30-120 seconds and with 25%
-probability simulates a purchase attribution by calling
-`POST /customers/{customer_id}/order-attributed` on the CRM.
+### Scalable Data Pipelines
 
-## Data model
-Six tables. Key design choices:
+The pipeline separates raw data, transformed data, and metric tables. This mirrors production analytics systems where raw logs are not queried directly by every dashboard. Instead, teams create reliable modeled tables that can support repeated analysis.
 
-**`filter_rules` stored as a JSON string on Segment**: lets the agent generate and
-store arbitrary filter combinations without schema migrations. The agent writes
-`{"recency_days": 60, "gender": "F", "category": "Ethnic Wear"}` and the
-`execute_segment_filter` function dynamically builds the SQL WHERE clause.
-Supports 9 filter keys: `recency_days`, `max_recency_days`, `min_spend`,
-`max_spend`, `gender`, `city`, `category`, `min_orders`, `max_orders`, plus
-special keys `customer_ids`, `message_statuses`, `campaign_status`, and
-`attributed_order` for campaign engagement queries.
+### Dashboarding
 
-**Journey table**: stores lifecycle automations with `trigger_rules` (same
-JSON filter format as segments), `message_template`, `channel`, and counters
-for `customers_enrolled` and `campaigns_triggered`.
+The Streamlit app is built as an analytics workspace with multiple views for different stakeholders: executives, product teams, safety teams, and analysts. The goal is not only to show charts, but to make business decisions easier.
 
-**Campaign aggregate counters denormalized**: `total_delivered`, `total_read`,
-`total_opened`, `total_clicked`, `total_failed`, `total_attributed_orders`,
-and `total_attributed_revenue` are updated on every `/receipt` callback via
-SQL COUNT subqueries. Analytics reads are O(1), with no aggregation at read time.
+### AI-Assisted Analytics
 
-**Per-event timestamps on Message**: `sent_at`, `delivered_at`, `read_at`,
-`opened_at`, `clicked_at`, `failed_at`, and `attributed_at` enable time-to-open
-analysis and delivery funnel charts without joining to a separate events table.
+The AI copilot lets a user ask questions such as "Why did DAU drop?", "Which feature has low adoption?", or "Show me campaign performance." The copilot connects natural language to the underlying analytics layer instead of inventing answers.
 
-**Rich customer profiles**: `preferred_channel`, `preferred_day`,
-`next_best_category`, `rfm_persona`, and `first_order_date` are computed from
-order history and stored as denormalized columns for fast CDP-style profile reads.
+### RAG And Natural-Language Insight Generation
 
-**`created_by` on Segment**: distinguishes `human`, `ai`, and `journey`-created
-segments.
+The copilot can use project documentation such as metric definitions, business rules, glossary notes, and data dictionary context. This is a lightweight Retrieval-Augmented Generation pattern: answers are grounded in the project's known definitions and available SQL metrics.
 
-## Local setup
+### Platform Safety Analytics
+
+The safety dashboard includes spam, abuse, suspicious behavior, blocking, and crash signals. This is especially relevant for messaging and social platforms where growth must be balanced with user trust and platform health.
+
+## Dashboards
+
+### Executive Overview
+
+High-level product health view showing user activity, message volume, notification performance, reliability, and anomaly alerts.
+
+### Retention & Funnel Dashboard
+
+Tracks activation, retention cohorts, conversion steps, and drop-off points across the user lifecycle.
+
+### Feature Adoption Dashboard
+
+Shows which product areas are being used, where adoption is weak, and which geographies or cohorts are contributing to growth.
+
+### Platform Safety Dashboard
+
+Monitors spam reports, abuse reports, suspicious friend requests, blocking behavior, and crash-rate signals.
+
+### AI Insights Copilot
+
+Natural-language analytics interface for asking product, growth, safety, and campaign questions.
+
+## Screenshot Placeholders
+
+Add screenshots to `docs/screenshots/` using these filenames.
+
+### Executive Overview Dashboard
+
+![Executive Overview Dashboard](docs/screenshots/executive-overview-dashboard.png)
+
+### Retention & Funnel Dashboard
+
+![Retention & Funnel Dashboard](docs/screenshots/retention-funnel-dashboard.png)
+
+### Feature Adoption Dashboard
+
+![Feature Adoption Dashboard](docs/screenshots/feature-adoption-dashboard.png)
+
+### Platform Safety Dashboard
+
+![Platform Safety Dashboard](docs/screenshots/platform-safety-dashboard.png)
+
+### AI Insights Copilot
+
+![AI Insights Copilot](docs/screenshots/ai-insights-copilot.png)
+
+## AI Copilot Examples
+
+Try questions like:
+
+- Why did DAU drop this week?
+- Which country has the highest message growth?
+- Which feature has low adoption?
+- Are spam reports increasing?
+- Which platform has the highest crash rate?
+- Show me all campaign performance.
+- Generate a weekly product analytics report.
+
+The app can run without a Groq API key. In mock mode, the copilot uses deterministic analytics responses and SQL-backed dashboard data. If `GROQ_API_KEY` is provided, the copilot can also use Groq for more flexible natural-language generation.
+
+## Campaign And Delivery Simulation
+
+The repository also includes the original campaign simulation workflow. It demonstrates how communication systems track delivery outcomes:
+
+```text
+Campaign launched
+  -> messages created
+  -> channel service queues delivery
+  -> sent / delivered / opened / clicked / failed callbacks
+  -> CRM backend records receipts
+  -> campaign analytics update
+```
+
+This part is useful for explaining webhook-driven event ingestion and attribution, which are common in marketing analytics, product notifications, and growth systems.
+
+## Tech Stack
+
+- Python
+- FastAPI
+- Streamlit
+- DuckDB
+- SQLite
+- SQLAlchemy
+- Pydantic
+- Pandas
+- Plotly
+- LangGraph/Groq utilities for optional AI workflows
+- Synthetic data generation and ETL pipelines
+
+## Repository Map
+
+```text
+app/streamlit_app.py                 Streamlit analytics dashboard
+main.py                              FastAPI application and health checks
+analytics/                           DuckDB client and analytics helpers
+ai/                                  AI copilot, RAG helpers, and SQL tools
+pipelines/                           Synthetic data, ETL, metric tables, anomalies
+docs/                                Metric definitions, glossary, business rules
+routers/                             API routers for analytics and campaign simulation
+models.py                            SQLAlchemy entities for campaign simulation
+schemas.py                           Pydantic request/response models
+seed_data.py                         Demo customer and order data generation
+tests/                               Lightweight validation tests
+```
+
+## Run Locally
+
+Recommended Python version: `3.11`.
+
+### 1. Install dependencies
+
 ```bash
-git clone https://github.com/tusharg007/xeno-crm-backend
-cd xeno-crm-backend
 pip install -r requirements.txt
-cp .env.example .env        # add GROQ_API_KEY
-
-python seed_data.py         # seeds 200 customers + 650-800 orders
-uvicorn main:app --reload   # starts on :8000, auto-seeds if DB empty
-
-# In a second terminal:
-git clone https://github.com/tusharg007/xeno-channel-service
-cd xeno-channel-service
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn main:app --port 8001 --reload
-
-# In a third terminal:
-cd xeno-crm-backend
-streamlit run streamlit_app.py
 ```
 
-## Required environment
-Backend:
+### 2. Generate synthetic analytics data
+
+```bash
+python pipelines/generate_synthetic_data.py --rows 100000
+```
+
+### 3. Run the ETL pipeline
+
+```bash
+python pipelines/etl_pipeline.py
+```
+
+### 4. Build metric tables and anomaly alerts
+
+```bash
+python pipelines/build_metric_tables.py
+python pipelines/anomaly_detection.py
+```
+
+### 5. Start the dashboard
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+### 6. Optional: start the FastAPI backend
+
+```bash
+uvicorn main:app --reload
+```
+
+FastAPI docs will be available at:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+## Mock Mode And API Keys
+
+The analytics dashboard works without external API keys. If `GROQ_API_KEY` is not set, the AI copilot falls back to deterministic analytics logic and SQL-backed responses.
+
+Optional `.env`:
 
 ```env
-GROQ_API_KEY=your_groq_key_here
+GROQ_API_KEY=
 LLM_PROVIDER=groq
 LLM_MODEL=llama-3.3-70b-versatile
-CHANNEL_SERVICE_URL=http://localhost:8001
 DATABASE_URL=sqlite:///./xeno_crm.db
+ANALYTICS_DB_PATH=data/processed/messaging_analytics.duckdb
+CHANNEL_SERVICE_URL=http://localhost:8001
 ```
 
-Channel service:
+## Strong Resume Bullets
 
-```env
-CRM_RECEIPT_URL=http://localhost:8000/receipt
-CRM_BASE_URL=http://localhost:8000
-PORT=8001
-```
+- Built an end-to-end product analytics platform for a simulated global messaging app, processing synthetic event data through Python ETL pipelines into DuckDB analytics tables and Streamlit dashboards.
+- Designed KPI dashboards for DAU, retention, funnel conversion, feature adoption, notification delivery, crash rate, spam reports, and campaign performance using SQL, Pandas, and Plotly.
+- Implemented an AI analytics copilot that maps natural-language product questions to SQL-backed metrics, documentation context, and deterministic fallback responses for mock-mode reliability.
+- Modeled webhook-style campaign delivery events through a FastAPI backend and async channel simulator, enabling delivery, open, click, failure, and attribution analytics.
+- Created recruiter-ready documentation, metric definitions, data dictionary, business rules, and demo scripts to explain product impact, data architecture, and future scaling paths.
 
-Streamlit Cloud:
+## Future Improvements
 
-```toml
-CRM_BACKEND_URL = "https://xeno-crm-backend-uelp.onrender.com"
-```
+- Move from SQLite/DuckDB local storage to PostgreSQL plus a warehouse-style analytics database.
+- Add dbt-style metric modeling and data quality tests.
+- Add Airflow or Dagster for scheduled orchestration.
+- Add Kafka or Redis queues for durable event ingestion and delivery callbacks.
+- Add authentication, role-based access, and audit logs for production readiness.
+- Add experiment analysis, cohort drilldowns, and anomaly alert routing.
+- Add a larger RAG layer over dashboards, metric definitions, incident reports, and product notes.
 
-## Project structure
-```text
-xeno-crm-backend/
-├── main.py                  # FastAPI app, startup auto-seed, /agent/chat, /demo/reset, /health
-├── config.py                # Pydantic settings: DATABASE_URL, GROQ_API_KEY, CHANNEL_SERVICE_URL
-├── database.py              # SQLAlchemy engine, SessionLocal, Base, get_db(), migration ALTERs
-├── models.py                # 6 SQLAlchemy 2.0 models (Mapped[] style)
-├── schemas.py               # Pydantic v2 schemas with computed delivery/attribution rates
-├── seed_data.py             # 200 customers + orders across 4 RFM segments + profile backfill
-├── streamlit_app.py         # Frontend: AI Agent, Analytics, Journeys (3 pages)
-├── requirements.txt         # Backend + Streamlit dependencies
-├── requirements_streamlit.txt # Streamlit Cloud subset (streamlit, plotly, requests)
-├── render.yaml              # Render deployment config (free tier, Python 3.11.9)
-├── runtime.txt              # Python version pin
-├── routers/
-│   ├── customers.py         # CRUD + /stats/overview + CDP profile + order attribution
-│   ├── segments.py          # CRUD + execute_segment_filter() engine (13 filter keys)
-│   ├── campaigns.py         # Create, launch, retry-delivery, performance, messages
-│   ├── journeys.py          # 6 templates, create, trigger, pause/resume
-│   └── receipts.py          # Async callback handler with idempotency + auto-complete
-└── agent/
-    ├── tools.py             # 6 LangGraph tools with db session injection
-    ├── graph.py             # Hybrid deterministic + StateGraph, HITL gate, session store
-    └── groq_utils.py        # ChatGroq builder, async/sync retry with exponential backoff
+## Important Documentation
 
-xeno-channel-service/
-├── main.py                  # POST /send, POST /send-batch, /health, /status
-└── simulator.py             # DeliverySimulator with per-channel profiles + attribution
-```
-
-## Smoke tests
-```bash
-curl https://xeno-crm-backend-uelp.onrender.com/health
-curl https://xeno-crm-backend-uelp.onrender.com/customers/stats/overview
-curl https://xeno-channel-service-c1yr.onrender.com/health
-```
-
-Expected:
-
-- CRM health returns `{"status":"ok","service":"xeno-crm","checks":{...}}` with DB and channel service checks.
-- Customer stats show 200 seeded customers and RFM counts.
-- Channel health returns `{"status":"ok","service":"xeno-channel-service"}`.
-- Streamlit sidebar shows customer, segment, and campaign counts.
-- Full loop works: find → draft → approve → launch → Analytics updates live.
-- Journeys: activate a template → trigger → campaign auto-launches → callbacks flow.
-
-## What I would add with more time
-1. **WebSocket for live dashboard**: replace polling with a WebSocket
-   connection that pushes receipt events to the frontend in real time.
-
-2. **LLM-personalized messages per recipient**: instead of string template
-   substitution, give the LLM each customer's purchase history and generate a
-   unique message for each recipient.
-
-3. **Predictive churn scoring**: use the RFM features already in the data model
-   to train a churn model; surface a risk score on each customer profile and let
-   the agent reference it when building segments.
-
-4. **Multi-tenant architecture**: add `brand_id` to all tables and scope every
-   query by it; the current single-tenant design supports this with one migration.
-
-5. **Campaign scheduling**: allow the agent to schedule a campaign for a future
-   datetime. "Send this tomorrow morning at 10am IST" is a natural language
-   instruction the agent could parse and honour.
-
-6. **Journey evaluation scheduler**: replace manual "Run now" with a background
-   scheduler that evaluates journey trigger rules on a configurable cadence
-   (e.g., every 6 hours) and auto-launches campaigns without manual intervention.
+- [Metric Definitions](docs/metric_definitions.md)
+- [Data Dictionary](docs/data_dictionary.md)
+- [Product Analytics Glossary](docs/product_analytics_glossary.md)
+- [Business Rules](docs/business_rules.md)
+- [AI Copilot Design](docs/ai_copilot_design.md)
+- [Interview Explanation](docs/interview_explanation.md)
+- [Demo Script](docs/demo_script.md)

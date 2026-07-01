@@ -1,5 +1,5 @@
 """
-LangGraph campaign agent for Xeno Mini CRM.
+Legacy LangGraph campaign agent for the campaign simulation workflow.
 
 Architecture:
   StateGraph with two nodes — agent (ReAct reasoning loop) and tools

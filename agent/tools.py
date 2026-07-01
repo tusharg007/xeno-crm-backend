@@ -1,5 +1,5 @@
 """
-LangGraph tool definitions for the Xeno campaign agent.
+LangGraph tool definitions for the legacy campaign simulation agent.
 
 Five tools, each decorated with @tool so LangGraph can bind them to the model.
 All tools receive a SQLAlchemy db Session via closure (get_tools factory) so
